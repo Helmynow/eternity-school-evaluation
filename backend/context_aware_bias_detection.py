@@ -13,7 +13,7 @@ from scipy import stats
 
 from backend.database import Assignment, Evaluation, Person, Cycle
 from backend.bias_detection import BiasDetector
-from backend.360_bias_detection import BiasFinding, BiasReport
+from backend.bias_detection_360 import BiasFinding, BiasReport
 
 
 @dataclass

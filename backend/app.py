@@ -8,7 +8,7 @@ from backend.weight_matrix import WeightMatrix
 from backend.weight_matrix_handler import WeightMatrixHandler
 from backend.bias_detection import BiasDetector
 from backend.eom_validation import EOMNominationValidator
-from backend.360_bias_detection import Complete360BiasDetection
+from backend.bias_detection_360 import Complete360BiasDetection
 import os
 from datetime import datetime
 

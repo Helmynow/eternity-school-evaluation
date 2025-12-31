@@ -21,7 +21,7 @@ from backend.database import (
 from backend.eom_validation import EOMNominationValidator
 from backend.eom_rotation_manager import EOMRotationManager
 from backend.weight_matrix_handler import WeightMatrixHandler
-from backend.360_bias_detection import Complete360BiasDetection
+from backend.bias_detection_360 import Complete360BiasDetection
 from backend.context_aware_bias_detection import ContextAware360BiasDetection
 from backend.academic_admin_scoring import AcademicAdminScoring
 from backend.optimized_evaluation_calculator import OptimizedEvaluationCalculator

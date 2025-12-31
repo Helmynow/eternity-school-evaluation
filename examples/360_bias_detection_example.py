@@ -2,7 +2,7 @@
 Example usage of Complete 360-Degree Bias Detection System.
 """
 from backend.database import Database
-from backend.360_bias_detection import Complete360BiasDetection
+from backend.bias_detection_360 import Complete360BiasDetection
 
 
 def main():

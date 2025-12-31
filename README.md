@@ -161,7 +161,7 @@ The `Complete360BiasDetection` class provides comprehensive bias detection for 3
 
 **Usage Example:**
 ```python
-from backend.360_bias_detection import Complete360BiasDetection
+from backend.bias_detection_360 import Complete360BiasDetection
 
 detector = Complete360BiasDetection(db_session)
 report = detector.generate_complete_report(cycle_id=1)

@@ -436,7 +436,7 @@ class TestScoreCalculation:
         """Test overall bias score calculation"""
         detector = ContextAware360BiasDetection(mock_db_session)
         
-        from backend.360_bias_detection import BiasFinding
+        from backend.bias_detection_360 import BiasFinding
         
         findings = [
             BiasFinding(

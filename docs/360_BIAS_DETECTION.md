@@ -117,7 +117,7 @@ GET /api/cycles/<cycle_id>/360_bias/target/<target_email>
 
 ```python
 from backend.database import Database
-from backend.360_bias_detection import Complete360BiasDetection
+from backend.bias_detection_360 import Complete360BiasDetection
 
 # Initialize
 db = Database()
