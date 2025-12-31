@@ -56,3 +56,12 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/
+
