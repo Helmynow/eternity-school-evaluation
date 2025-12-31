@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import toast from 'react-hot-toast'
-import logo from '../../../public/assets/media/logo-no-bound.png'
+// Logo path - public assets are served at root
+const logoPath = '/assets/media/logo-no-bound.png'
 
 const Login = ({ supabase: supabaseClient }) => {
   const [email, setEmail] = useState('')
@@ -40,7 +41,7 @@ const Login = ({ supabase: supabaseClient }) => {
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <img 
-            src={logo} 
+            src={logoPath} 
             alt="Eternity School Logo" 
             className="h-16 w-auto mx-auto mb-4"
             onError={(e) => {

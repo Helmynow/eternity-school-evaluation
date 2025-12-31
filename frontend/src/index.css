@@ -1,9 +1,9 @@
+/* ESE Theme Variables - Import from design system (must be first) */
+@import url('./styles/ese-theme.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ESE Theme Variables - Import from design system */
-@import url('./styles/ese-theme.css');
 
 @layer base {
   * {

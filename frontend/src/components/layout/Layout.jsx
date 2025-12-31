@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
-import logo from '../../../public/assets/media/logo-no-bound.png'
+// Logo path - public assets are served at root
+const logoPath = '/assets/media/logo-no-bound.png'
 
 const Layout = ({ children }) => {
   const { user, role, signOut, isCEO, isPNC, isDepartmentHead } = useAuth()
@@ -39,12 +40,11 @@ const Layout = ({ children }) => {
             {/* Logo */}
             <Link to="/" className="flex items-center space-x-3">
               <img 
-                src={logo} 
+                src={logoPath} 
                 alt="Eternity School Logo" 
                 className="h-10 w-auto"
                 onError={(e) => {
                   e.target.style.display = 'none'
-                  e.target.nextSibling.style.display = 'block'
                 }}
               />
               <span className="hidden">ESE</span>
