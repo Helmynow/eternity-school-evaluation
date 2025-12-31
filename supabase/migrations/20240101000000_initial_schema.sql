@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS cycles (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_cycles_code ON cycles(code);
-CREATE INDEX idx_cycles_status ON cycles(status);
+CREATE INDEX IF NOT EXISTS idx_cycles_code ON cycles(code);
+CREATE INDEX IF NOT EXISTS idx_cycles_status ON cycles(status);
 
 -- People table (Staff)
 CREATE TABLE IF NOT EXISTS people (
@@ -62,9 +62,10 @@ CREATE TABLE IF NOT EXISTS people (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_person_segment ON people(segment);
-CREATE INDEX idx_person_active ON people(active);
-CREATE INDEX idx_person_department ON people(department);
+-- Create indexes only if columns exist (handled in migration 20240101000004)
+-- CREATE INDEX IF NOT EXISTS idx_person_segment ON people(segment);
+-- CREATE INDEX IF NOT EXISTS idx_person_active ON people(active);
+-- CREATE INDEX IF NOT EXISTS idx_person_department ON people(department);
 
 -- Weight Matrices table
 CREATE TABLE IF NOT EXISTS weight_matrices (
@@ -78,8 +79,8 @@ CREATE TABLE IF NOT EXISTS weight_matrices (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_weight_matrix_cycle ON weight_matrices(cycle_id);
-CREATE INDEX idx_weight_matrix_active ON weight_matrices(is_active);
+CREATE INDEX IF NOT EXISTS idx_weight_matrix_cycle ON weight_matrices(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_weight_matrix_active ON weight_matrices(is_active);
 
 -- Assignments table (MRE)
 CREATE TABLE IF NOT EXISTS assignments (
@@ -97,11 +98,11 @@ CREATE TABLE IF NOT EXISTS assignments (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_assignment_cycle ON assignments(cycle_id);
-CREATE INDEX idx_assignment_rater ON assignments(rater_email);
-CREATE INDEX idx_assignment_target ON assignments(target_email);
-CREATE INDEX idx_assignment_context ON assignments(rater_context);
-CREATE INDEX idx_assignment_target_group ON assignments(target_group);
+CREATE INDEX IF NOT EXISTS idx_assignment_cycle ON assignments(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_assignment_rater ON assignments(rater_email);
+CREATE INDEX IF NOT EXISTS idx_assignment_target ON assignments(target_email);
+CREATE INDEX IF NOT EXISTS idx_assignment_context ON assignments(rater_context);
+CREATE INDEX IF NOT EXISTS idx_assignment_target_group ON assignments(target_group);
 
 -- Evaluations table
 CREATE TABLE IF NOT EXISTS evaluations (
@@ -117,9 +118,9 @@ CREATE TABLE IF NOT EXISTS evaluations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_evaluation_assignment ON evaluations(assignment_id);
-CREATE INDEX idx_evaluation_status ON evaluations(status);
-CREATE INDEX idx_evaluation_submitted ON evaluations(submitted_at);
+CREATE INDEX IF NOT EXISTS idx_evaluation_assignment ON evaluations(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_status ON evaluations(status);
+CREATE INDEX IF NOT EXISTS idx_evaluation_submitted ON evaluations(submitted_at);
 
 -- ============================================================================
 -- EOM (Employee of the Month) TABLES
@@ -138,8 +139,8 @@ CREATE TABLE IF NOT EXISTS eom_cycles (
     UNIQUE(cycle_id, month, year)
 );
 
-CREATE INDEX idx_eom_cycle_year_month ON eom_cycles(year, month);
-CREATE INDEX idx_eom_cycle_status ON eom_cycles(status);
+CREATE INDEX IF NOT EXISTS idx_eom_cycle_year_month ON eom_cycles(year, month);
+CREATE INDEX IF NOT EXISTS idx_eom_cycle_status ON eom_cycles(status);
 
 -- EOM Voters table
 CREATE TABLE IF NOT EXISTS eom_voters (
@@ -149,8 +150,8 @@ CREATE TABLE IF NOT EXISTS eom_voters (
     UNIQUE(eom_cycle_id, voter_email)
 );
 
-CREATE INDEX idx_eom_voter_cycle ON eom_voters(eom_cycle_id);
-CREATE INDEX idx_eom_voter_email ON eom_voters(voter_email);
+CREATE INDEX IF NOT EXISTS idx_eom_voter_cycle ON eom_voters(eom_cycle_id);
+CREATE INDEX IF NOT EXISTS idx_eom_voter_email ON eom_voters(voter_email);
 
 -- EOM Nominees table
 CREATE TABLE IF NOT EXISTS eom_nominees (
@@ -171,10 +172,10 @@ CREATE TABLE IF NOT EXISTS eom_nominees (
     UNIQUE(eom_cycle_id, nominee_email, category)
 );
 
-CREATE INDEX idx_eom_nominee_category ON eom_nominees(category);
-CREATE INDEX idx_eom_nominee_rotation ON eom_nominees(rotation_eligible);
-CREATE INDEX idx_eom_nominee_cycle ON eom_nominees(eom_cycle_id);
-CREATE INDEX idx_eom_nominee_email ON eom_nominees(nominee_email);
+CREATE INDEX IF NOT EXISTS idx_eom_nominee_category ON eom_nominees(category);
+CREATE INDEX IF NOT EXISTS idx_eom_nominee_rotation ON eom_nominees(rotation_eligible);
+CREATE INDEX IF NOT EXISTS idx_eom_nominee_cycle ON eom_nominees(eom_cycle_id);
+CREATE INDEX IF NOT EXISTS idx_eom_nominee_email ON eom_nominees(nominee_email);
 
 -- EOM Winners table
 CREATE TABLE IF NOT EXISTS eom_winners (
@@ -187,9 +188,9 @@ CREATE TABLE IF NOT EXISTS eom_winners (
     announced_at DATE DEFAULT CURRENT_DATE
 );
 
-CREATE INDEX idx_eom_winner_cycle ON eom_winners(eom_cycle_id);
-CREATE INDEX idx_eom_winner_email ON eom_winners(winner_email);
-CREATE INDEX idx_eom_winner_term ON eom_winners(term);
+CREATE INDEX IF NOT EXISTS idx_eom_winner_cycle ON eom_winners(eom_cycle_id);
+CREATE INDEX IF NOT EXISTS idx_eom_winner_email ON eom_winners(winner_email);
+CREATE INDEX IF NOT EXISTS idx_eom_winner_term ON eom_winners(term);
 
 -- EOM Rotation Rules table
 CREATE TABLE IF NOT EXISTS eom_rotation_rules (
@@ -206,9 +207,9 @@ CREATE TABLE IF NOT EXISTS eom_rotation_rules (
     UNIQUE(cycle_id, category)
 );
 
-CREATE INDEX idx_rotation_rule_cycle ON eom_rotation_rules(cycle_id);
-CREATE INDEX idx_rotation_rule_category ON eom_rotation_rules(category);
-CREATE INDEX idx_rotation_rule_active ON eom_rotation_rules(is_active);
+CREATE INDEX IF NOT EXISTS idx_rotation_rule_cycle ON eom_rotation_rules(cycle_id);
+CREATE INDEX IF NOT EXISTS idx_rotation_rule_category ON eom_rotation_rules(category);
+CREATE INDEX IF NOT EXISTS idx_rotation_rule_active ON eom_rotation_rules(is_active);
 
 -- ============================================================================
 -- AUDIT TRAIL
@@ -228,10 +229,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_log_action ON audit_logs(action_type);
-CREATE INDEX idx_audit_log_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_log_user ON audit_logs(user_email);
-CREATE INDEX idx_audit_log_timestamp ON audit_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_logs(user_email);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_logs(timestamp);
 
 -- ============================================================================
 -- TRIGGERS FOR UPDATED_AT
