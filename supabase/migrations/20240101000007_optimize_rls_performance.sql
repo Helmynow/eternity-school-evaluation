@@ -104,29 +104,33 @@ CREATE POLICY "Users can update their own evaluations"
         )) OR (select auth.role()) = 'service_role'
     );
 
--- EOM Cycles policies - Consolidate multiple policies into one
+-- EOM Cycles policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "EOM cycles are viewable by authenticated users" ON eom_cycles;
 DROP POLICY IF EXISTS "EOM cycles are modifiable by service role" ON eom_cycles;
 
+-- SELECT: authenticated users only (service_role bypasses RLS)
 CREATE POLICY "EOM cycles are viewable by authenticated users"
     ON eom_cycles FOR SELECT
-    USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+    USING ((select auth.role()) = 'authenticated');
 
+-- Write operations: service_role only (INSERT/UPDATE/DELETE, not SELECT)
 CREATE POLICY "EOM cycles are modifiable by service role"
-    ON eom_cycles FOR ALL
+    ON eom_cycles FOR INSERT, UPDATE, DELETE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
--- EOM Voters policies - Consolidate multiple policies into one
+-- EOM Voters policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Users can view EOM voters" ON eom_voters;
 DROP POLICY IF EXISTS "EOM voters are modifiable by service role" ON eom_voters;
 
+-- SELECT: authenticated users only
 CREATE POLICY "Users can view EOM voters"
     ON eom_voters FOR SELECT
-    USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+    USING ((select auth.role()) = 'authenticated');
 
+-- Write operations: service_role only
 CREATE POLICY "EOM voters are modifiable by service role"
-    ON eom_voters FOR ALL
+    ON eom_voters FOR INSERT, UPDATE, DELETE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
@@ -150,42 +154,48 @@ CREATE POLICY "EOM nominees are updatable by service role"
     ON eom_nominees FOR UPDATE
     USING ((select auth.role()) = 'service_role');
 
--- EOM Winners policies - Consolidate multiple policies into one
+-- EOM Winners policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "EOM winners are viewable by authenticated users" ON eom_winners;
 DROP POLICY IF EXISTS "EOM winners are modifiable by service role" ON eom_winners;
 
+-- SELECT: authenticated users only
 CREATE POLICY "EOM winners are viewable by authenticated users"
     ON eom_winners FOR SELECT
-    USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+    USING ((select auth.role()) = 'authenticated');
 
+-- Write operations: service_role only
 CREATE POLICY "EOM winners are modifiable by service role"
-    ON eom_winners FOR ALL
+    ON eom_winners FOR INSERT, UPDATE, DELETE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
--- EOM Rotation Rules policies - Consolidate multiple policies into one
+-- EOM Rotation Rules policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Rotation rules are viewable by authenticated users" ON eom_rotation_rules;
 DROP POLICY IF EXISTS "Rotation rules are modifiable by service role" ON eom_rotation_rules;
 
+-- SELECT: authenticated users only
 CREATE POLICY "Rotation rules are viewable by authenticated users"
     ON eom_rotation_rules FOR SELECT
-    USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+    USING ((select auth.role()) = 'authenticated');
 
+-- Write operations: service_role only
 CREATE POLICY "Rotation rules are modifiable by service role"
-    ON eom_rotation_rules FOR ALL
+    ON eom_rotation_rules FOR INSERT, UPDATE, DELETE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
--- Weight Matrices policies - Consolidate multiple policies into one
+-- Weight Matrices policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Weight matrices are viewable by authenticated users" ON weight_matrices;
 DROP POLICY IF EXISTS "Weight matrices are modifiable by service role" ON weight_matrices;
 
+-- SELECT: authenticated users only
 CREATE POLICY "Weight matrices are viewable by authenticated users"
     ON weight_matrices FOR SELECT
-    USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+    USING ((select auth.role()) = 'authenticated');
 
+-- Write operations: service_role only
 CREATE POLICY "Weight matrices are modifiable by service role"
-    ON weight_matrices FOR ALL
+    ON weight_matrices FOR INSERT, UPDATE, DELETE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
@@ -205,93 +215,110 @@ CREATE POLICY "Audit logs are insertable by service role"
 -- FIX POLICIES FOR LEGACY TABLES (if they exist)
 -- ============================================================================
 
--- Fix eval_rater_rules policies (if table exists)
+-- Fix eval_rater_rules policies (if table exists) - Separate SELECT from write operations
 DO $$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'eval_rater_rules') THEN
         DROP POLICY IF EXISTS "eval_rater_rules_select" ON eval_rater_rules;
         DROP POLICY IF EXISTS "eval_rater_rules_modify" ON eval_rater_rules;
         
+        -- SELECT: authenticated users only
         CREATE POLICY "eval_rater_rules_select"
             ON eval_rater_rules FOR SELECT
-            USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+            USING ((select auth.role()) = 'authenticated');
         
+        -- Write operations: service_role only
         CREATE POLICY "eval_rater_rules_modify"
-            ON eval_rater_rules FOR ALL
+            ON eval_rater_rules FOR INSERT, UPDATE, DELETE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
--- Fix eval_domain_rules policies (if table exists)
+-- Fix eval_domain_rules policies (if table exists) - Separate SELECT from write operations
 DO $$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'eval_domain_rules') THEN
         DROP POLICY IF EXISTS "eval_domain_rules_select" ON eval_domain_rules;
         DROP POLICY IF EXISTS "eval_domain_rules_modify" ON eval_domain_rules;
         
+        -- SELECT: authenticated users only
         CREATE POLICY "eval_domain_rules_select"
             ON eval_domain_rules FOR SELECT
-            USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+            USING ((select auth.role()) = 'authenticated');
         
+        -- Write operations: service_role only
         CREATE POLICY "eval_domain_rules_modify"
-            ON eval_domain_rules FOR ALL
+            ON eval_domain_rules FOR INSERT, UPDATE, DELETE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
--- Fix voters policies (if table exists)
+-- Fix voters policies (if table exists) - Separate SELECT from write operations
 DO $$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'voters') THEN
         DROP POLICY IF EXISTS "voters_select" ON voters;
         DROP POLICY IF EXISTS "voters_modify" ON voters;
         
+        -- SELECT: authenticated users only
         CREATE POLICY "voters_select"
             ON voters FOR SELECT
-            USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+            USING ((select auth.role()) = 'authenticated');
         
+        -- Write operations: service_role only
         CREATE POLICY "voters_modify"
-            ON voters FOR ALL
+            ON voters FOR INSERT, UPDATE, DELETE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
--- Fix winners policies (if table exists)
+-- Fix winners policies (if table exists) - Separate SELECT from write operations
 DO $$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'winners') THEN
         DROP POLICY IF EXISTS "winners_select" ON winners;
         DROP POLICY IF EXISTS "winners_modify" ON winners;
         
+        -- SELECT: authenticated users only
         CREATE POLICY "winners_select"
             ON winners FOR SELECT
-            USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+            USING ((select auth.role()) = 'authenticated');
         
+        -- Write operations: service_role only
         CREATE POLICY "winners_modify"
-            ON winners FOR ALL
+            ON winners FOR INSERT, UPDATE, DELETE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
--- Fix school_terms policies (if table exists)
+-- Fix school_terms policies (if table exists) - Separate SELECT from write operations
 DO $$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'school_terms') THEN
         DROP POLICY IF EXISTS "school_terms_select" ON school_terms;
         DROP POLICY IF EXISTS "school_terms_modify" ON school_terms;
         
+        -- SELECT: authenticated users only
         CREATE POLICY "school_terms_select"
             ON school_terms FOR SELECT
-            USING ((select auth.role()) = 'authenticated' OR (select auth.role()) = 'service_role');
+            USING ((select auth.role()) = 'authenticated');
         
+        -- Write operations: service_role only
         CREATE POLICY "school_terms_modify"
-            ON school_terms FOR ALL
+            ON school_terms FOR INSERT, UPDATE, DELETE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
     END IF;
 END $$;
+
+-- ============================================================================
+-- FIX DUPLICATE PEOPLE SELECT POLICY
+-- ============================================================================
+
+-- Remove duplicate people_select_all policy if it exists
+DROP POLICY IF EXISTS "people_select_all" ON people;
 
