@@ -52,24 +52,20 @@ echo ""
 # Apply migrations
 echo "Applying database migrations..."
 echo ""
+echo "  → Pushing all migrations to remote database..."
+echo "  (This will apply all pending migrations from the migrations/ folder)"
+echo ""
 
-MIGRATION_FILES=(
-    "migrations/20240101000000_initial_schema.sql"
-    "migrations/20240101000001_create_views.sql"
-    "migrations/20240101000002_create_functions.sql"
-    "migrations/20240101000003_row_level_security.sql"
-)
-
-for migration in "${MIGRATION_FILES[@]}"; do
-    if [ -f "$migration" ]; then
-        echo "  → Applying $migration"
-        supabase db push --file "$migration" || {
-            echo "  ⚠️  Migration may have already been applied"
-        }
-    else
-        echo "  ⚠️  Migration file not found: $migration"
-    fi
-done
+# Use supabase db push to apply all migrations
+# This command automatically detects and applies pending migrations
+supabase db push --yes || {
+    echo ""
+    echo "  ⚠️  Migration push failed or migrations already applied"
+    echo "  If tables already exist, you may need to:"
+    echo "    1. Drop existing tables manually, OR"
+    echo "    2. Mark migrations as applied: supabase migration repair"
+    echo ""
+}
 
 echo ""
 echo "============================================================================"

@@ -5,17 +5,37 @@
 -- ENUMS
 -- ============================================================================
 
-CREATE TYPE staff_segment AS ENUM ('national', 'international', 'whole_school');
-CREATE TYPE eom_category AS ENUM ('academic', 'admin', 'support', 'leadership', 'innovation', 'collaboration', 'student_engagement');
-CREATE TYPE action_type AS ENUM ('create', 'update', 'delete', 'submit', 'approve', 'reject', 'view', 'export');
-CREATE TYPE rotation_period_type AS ENUM ('year', 'quarter', 'month', 'term');
+-- Create enums only if they don't exist
+DO $$ BEGIN
+    CREATE TYPE staff_segment AS ENUM ('national', 'international', 'whole_school');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE eom_category AS ENUM ('academic', 'admin', 'support', 'leadership', 'innovation', 'collaboration', 'student_engagement');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE action_type AS ENUM ('create', 'update', 'delete', 'submit', 'approve', 'reject', 'view', 'export');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE rotation_period_type AS ENUM ('year', 'quarter', 'month', 'term');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================================================
 -- CORE TABLES
 -- ============================================================================
 
 -- Cycles table
-CREATE TABLE cycles (
+CREATE TABLE IF NOT EXISTS cycles (
     id SERIAL PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(200) NOT NULL,
@@ -30,7 +50,7 @@ CREATE INDEX idx_cycles_code ON cycles(code);
 CREATE INDEX idx_cycles_status ON cycles(status);
 
 -- People table (Staff)
-CREATE TABLE people (
+CREATE TABLE IF NOT EXISTS people (
     email VARCHAR(255) PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
     role_title VARCHAR(100),
@@ -47,7 +67,7 @@ CREATE INDEX idx_person_active ON people(active);
 CREATE INDEX idx_person_department ON people(department);
 
 -- Weight Matrices table
-CREATE TABLE weight_matrices (
+CREATE TABLE IF NOT EXISTS weight_matrices (
     id SERIAL PRIMARY KEY,
     cycle_id INTEGER REFERENCES cycles(id) ON DELETE CASCADE,
     name VARCHAR(200),
@@ -62,7 +82,7 @@ CREATE INDEX idx_weight_matrix_cycle ON weight_matrices(cycle_id);
 CREATE INDEX idx_weight_matrix_active ON weight_matrices(is_active);
 
 -- Assignments table (MRE)
-CREATE TABLE assignments (
+CREATE TABLE IF NOT EXISTS assignments (
     id SERIAL PRIMARY KEY,
     cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
     rater_email VARCHAR(255) NOT NULL REFERENCES people(email) ON DELETE CASCADE,
@@ -84,7 +104,7 @@ CREATE INDEX idx_assignment_context ON assignments(rater_context);
 CREATE INDEX idx_assignment_target_group ON assignments(target_group);
 
 -- Evaluations table
-CREATE TABLE evaluations (
+CREATE TABLE IF NOT EXISTS evaluations (
     id SERIAL PRIMARY KEY,
     assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     rating FLOAT,
@@ -106,7 +126,7 @@ CREATE INDEX idx_evaluation_submitted ON evaluations(submitted_at);
 -- ============================================================================
 
 -- EOM Cycles table
-CREATE TABLE eom_cycles (
+CREATE TABLE IF NOT EXISTS eom_cycles (
     id SERIAL PRIMARY KEY,
     cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
     month INTEGER NOT NULL,
@@ -122,7 +142,7 @@ CREATE INDEX idx_eom_cycle_year_month ON eom_cycles(year, month);
 CREATE INDEX idx_eom_cycle_status ON eom_cycles(status);
 
 -- EOM Voters table
-CREATE TABLE eom_voters (
+CREATE TABLE IF NOT EXISTS eom_voters (
     id SERIAL PRIMARY KEY,
     eom_cycle_id INTEGER NOT NULL REFERENCES eom_cycles(id) ON DELETE CASCADE,
     voter_email VARCHAR(255) NOT NULL REFERENCES people(email) ON DELETE CASCADE,
@@ -133,7 +153,7 @@ CREATE INDEX idx_eom_voter_cycle ON eom_voters(eom_cycle_id);
 CREATE INDEX idx_eom_voter_email ON eom_voters(voter_email);
 
 -- EOM Nominees table
-CREATE TABLE eom_nominees (
+CREATE TABLE IF NOT EXISTS eom_nominees (
     id SERIAL PRIMARY KEY,
     eom_cycle_id INTEGER NOT NULL REFERENCES eom_cycles(id) ON DELETE CASCADE,
     nominee_email VARCHAR(255) NOT NULL REFERENCES people(email) ON DELETE CASCADE,
@@ -157,7 +177,7 @@ CREATE INDEX idx_eom_nominee_cycle ON eom_nominees(eom_cycle_id);
 CREATE INDEX idx_eom_nominee_email ON eom_nominees(nominee_email);
 
 -- EOM Winners table
-CREATE TABLE eom_winners (
+CREATE TABLE IF NOT EXISTS eom_winners (
     id SERIAL PRIMARY KEY,
     eom_cycle_id INTEGER NOT NULL REFERENCES eom_cycles(id) ON DELETE CASCADE,
     winner_email VARCHAR(255) NOT NULL REFERENCES people(email) ON DELETE CASCADE,
@@ -172,7 +192,7 @@ CREATE INDEX idx_eom_winner_email ON eom_winners(winner_email);
 CREATE INDEX idx_eom_winner_term ON eom_winners(term);
 
 -- EOM Rotation Rules table
-CREATE TABLE eom_rotation_rules (
+CREATE TABLE IF NOT EXISTS eom_rotation_rules (
     id SERIAL PRIMARY KEY,
     cycle_id INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
     category eom_category NOT NULL,
@@ -195,7 +215,7 @@ CREATE INDEX idx_rotation_rule_active ON eom_rotation_rules(is_active);
 -- ============================================================================
 
 -- Audit Log table
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     action_type action_type NOT NULL,
     entity_type VARCHAR(100),
