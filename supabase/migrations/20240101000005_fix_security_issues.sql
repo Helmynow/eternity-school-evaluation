@@ -9,8 +9,8 @@
 -- rather than the view creator's permissions
 
 -- MRE Views
-CREATE OR REPLACE VIEW mre_who_evaluates_who
-WITH (security_invoker = true) AS
+-- Note: Using ALTER VIEW to set security_invoker after creation
+CREATE OR REPLACE VIEW mre_who_evaluates_who AS
 SELECT
     cy.code          AS cycle_code,
     a.rater_email,
@@ -31,8 +31,9 @@ LEFT JOIN people pt ON pt.email = a.target_email
 LEFT JOIN evaluations e ON e.assignment_id = a.id
 ORDER BY cycle_code, a.target_group, a.rater_context, rater_name, target_name;
 
-CREATE OR REPLACE VIEW mre_evaluation_summary
-WITH (security_invoker = true) AS
+ALTER VIEW mre_who_evaluates_who SET (security_invoker = true);
+
+CREATE OR REPLACE VIEW mre_evaluation_summary AS
 SELECT
     cy.code AS cycle_code,
     a.target_email,
@@ -51,9 +52,10 @@ LEFT JOIN evaluations e ON e.assignment_id = a.id
 GROUP BY cy.code, a.target_email, pt.full_name
 ORDER BY cycle_code, target_name;
 
+ALTER VIEW mre_evaluation_summary SET (security_invoker = true);
+
 -- EOM Views
-CREATE OR REPLACE VIEW eom_participants
-WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW eom_participants AS
 SELECT
     cy.code || '-EOM-' || LPAD(e.month::text, 2, '0') || '-' || e.year AS eom_code,
     'voter' AS kind,
@@ -79,8 +81,9 @@ JOIN cycles cy ON cy.id = e.cycle_id
 LEFT JOIN people p2 ON p2.email = n.nominee_email
 ORDER BY eom_code, kind, full_name;
 
-CREATE OR REPLACE VIEW eom_nomination_summary
-WITH (security_invoker = true) AS
+ALTER VIEW eom_participants SET (security_invoker = true);
+
+CREATE OR REPLACE VIEW eom_nomination_summary AS
 SELECT
     cy.code || '-EOM-' || LPAD(e.month::text, 2, '0') || '-' || e.year AS eom_code,
     e.month,
@@ -96,8 +99,9 @@ JOIN cycles cy ON cy.id = e.cycle_id
 GROUP BY cy.code, e.month, e.year, n.category
 ORDER BY e.year DESC, e.month DESC, n.category;
 
-CREATE OR REPLACE VIEW eom_winner_history
-WITH (security_invoker = true) AS
+ALTER VIEW eom_nomination_summary SET (security_invoker = true);
+
+CREATE OR REPLACE VIEW eom_winner_history AS
 SELECT
     w.id,
     cy.code || '-EOM-' || LPAD(e.month::text, 2, '0') || '-' || e.year AS eom_code,
@@ -115,9 +119,10 @@ JOIN cycles cy ON cy.id = e.cycle_id
 LEFT JOIN people p ON p.email = w.winner_email
 ORDER BY e.year DESC, e.month DESC, w.announced_at DESC;
 
+ALTER VIEW eom_winner_history SET (security_invoker = true);
+
 -- Scoring Views
-CREATE OR REPLACE VIEW weighted_score_summary
-WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW weighted_score_summary AS
 SELECT
     cy.code AS cycle_code,
     NULL::staff_segment AS segment,
@@ -133,9 +138,10 @@ LEFT JOIN evaluations e ON e.assignment_id = a.id
 GROUP BY cy.code
 ORDER BY cycle_code;
 
+ALTER VIEW weighted_score_summary SET (security_invoker = true);
+
 -- Audit Views
-CREATE OR REPLACE VIEW recent_audit_logs
-WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW recent_audit_logs AS
 SELECT
     al.id,
     al.action_type,
@@ -151,12 +157,13 @@ LEFT JOIN people p ON p.email = al.user_email
 ORDER BY al.timestamp DESC
 LIMIT 1000;
 
+ALTER VIEW recent_audit_logs SET (security_invoker = true);
+
 -- Create or replace eom_eligible_current view (mentioned in security warnings)
 -- Drop first if exists to avoid column mismatch errors
 DROP VIEW IF EXISTS eom_eligible_current;
 
-CREATE VIEW eom_eligible_current
-WITH (security_invoker = true) AS
+CREATE VIEW eom_eligible_current AS
 SELECT DISTINCT
     p.email,
     p.full_name,
@@ -174,6 +181,8 @@ SELECT DISTINCT
 FROM people p
 LEFT JOIN eom_nominees n ON n.nominee_email = p.email
 WHERE p.active = TRUE;
+
+ALTER VIEW eom_eligible_current SET (security_invoker = true);
 
 -- ============================================================================
 -- ENABLE RLS ON MISSING TABLES
