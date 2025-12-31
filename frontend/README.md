@@ -16,6 +16,10 @@ Frontend application for the Employee of the Month (EOM) and Multi-Rater Evaluat
 # Install dependencies
 npm install
 
+# Copy environment variables
+cp .env.example .env
+# Edit .env with your Supabase credentials
+
 # Start development server
 npm run dev
 
@@ -41,6 +45,7 @@ The frontend follows ESE brand guidelines:
 - **Fonts**: Plus Jakarta Sans (body), Fraunces (headings)
 - **Mascots**: Located in `/public/assets/mascots/`
 - **Icons**: Located in `/public/assets/icons/`
+- **Logo**: Located in `/public/assets/media/logo-no-bound.png`
 
 ## Project Structure
 
@@ -53,10 +58,31 @@ frontend/
 │   │   ├── mre/          # MRE evaluation forms
 │   │   ├── auth/          # Authentication
 │   │   └── layout/        # Layout components
+│   ├── hooks/             # React hooks (useAuth, useAPI)
 │   ├── lib/               # Utilities & API clients
-│   ├── hooks/             # React hooks
 │   └── styles/            # CSS & theme files
 └── public/
     └── assets/            # Mascots, icons, media
 ```
 
+## Development
+
+The app runs on `http://localhost:3000` and proxies API requests to `http://localhost:8000`.
+
+### Key Technologies
+
+- **React 18.3** - UI framework
+- **Vite 5.4** - Build tool
+- **React Router 6.26** - Routing
+- **Tailwind CSS 3.4** - Styling
+- **Supabase Auth** - Authentication
+- **Axios** - HTTP client
+- **Recharts** - Data visualization
+- **React Hot Toast** - Notifications
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
