@@ -38,14 +38,78 @@ BEGIN
     END IF;
 END $$;
 
+-- Add active column if missing
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'active'
+    ) THEN
+        ALTER TABLE people ADD COLUMN active BOOLEAN DEFAULT TRUE;
+    END IF;
+END $$;
+
+-- Add department column if missing
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'department'
+    ) THEN
+        ALTER TABLE people ADD COLUMN department VARCHAR(100);
+    END IF;
+END $$;
+
+-- Add role_title column if missing
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'role_title'
+    ) THEN
+        ALTER TABLE people ADD COLUMN role_title VARCHAR(100);
+    END IF;
+END $$;
+
+-- Add hire_date column if missing
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'hire_date'
+    ) THEN
+        ALTER TABLE people ADD COLUMN hire_date DATE;
+    END IF;
+END $$;
+
 -- ============================================================================
--- CREATE INDEXES IF THEY DON'T EXIST
+-- CREATE INDEXES IF THEY DON'T EXIST (only if columns exist)
 -- ============================================================================
 
--- Create indexes only if they don't exist
-CREATE INDEX IF NOT EXISTS idx_person_segment ON people(segment);
-CREATE INDEX IF NOT EXISTS idx_person_active ON people(active);
-CREATE INDEX IF NOT EXISTS idx_person_department ON people(department);
+-- Create indexes only if columns exist
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'segment'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_person_segment ON people(segment);
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'active'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_person_active ON people(active);
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'department'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_person_department ON people(department);
+    END IF;
+END $$;
 
 -- ============================================================================
 -- ADD MISSING COLUMNS TO OTHER TABLES

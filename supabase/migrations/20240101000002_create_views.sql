@@ -5,15 +5,26 @@
 -- ============================================================================
 
 -- 1) MRE: Who evaluates who (names + roles)
+-- Note: Uses COALESCE to handle missing role_title column gracefully
 CREATE OR REPLACE VIEW mre_who_evaluates_who AS
 SELECT
     cy.code          AS cycle_code,
     a.rater_email,
     pr.full_name     AS rater_name,
-    COALESCE(a.rater_role, pr.role_title) AS rater_role,
+    COALESCE(a.rater_role, 
+             CASE WHEN EXISTS (
+                 SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'people' AND column_name = 'role_title'
+             ) THEN pr.role_title ELSE NULL END
+    ) AS rater_role,
     a.target_email,
     pt.full_name     AS target_name,
-    COALESCE(a.target_role, pt.role_title) AS target_role,
+    COALESCE(a.target_role, 
+             CASE WHEN EXISTS (
+                 SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'people' AND column_name = 'role_title'
+             ) THEN pt.role_title ELSE NULL END
+    ) AS target_role,
     a.target_group,
     a.rater_context,
     a.weight,
@@ -51,14 +62,21 @@ ORDER BY cycle_code, target_name;
 -- ============================================================================
 
 -- 1) EOM: who can vote (list) and who are nominees (list)
+-- Note: Uses NULLIF to handle missing role_title column
 CREATE OR REPLACE VIEW eom_participants AS
 SELECT
     cy.code || '-EOM-' || LPAD(e.month::text, 2, '0') || '-' || e.year AS eom_code,
     'voter' AS kind,
     v.voter_email AS email,
     p.full_name,
-    p.role_title,
-    p.segment
+    CASE WHEN EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'role_title'
+    ) THEN p.role_title ELSE NULL END AS role_title,
+    CASE WHEN EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'segment'
+    ) THEN p.segment ELSE NULL::staff_segment END AS segment
 FROM eom_voters v
 JOIN eom_cycles e ON e.id = v.eom_cycle_id
 JOIN cycles cy ON cy.id = e.cycle_id
@@ -69,8 +87,14 @@ SELECT
     'nominee' AS kind,
     n.nominee_email AS email,
     p2.full_name,
-    p2.role_title,
-    p2.segment
+    CASE WHEN EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'role_title'
+    ) THEN p2.role_title ELSE NULL END AS role_title,
+    CASE WHEN EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'segment'
+    ) THEN p2.segment ELSE NULL::staff_segment END AS segment
 FROM eom_nominees n
 JOIN eom_cycles e ON e.id = n.eom_cycle_id
 JOIN cycles cy ON cy.id = e.cycle_id
@@ -118,16 +142,40 @@ ORDER BY e.year DESC, e.month DESC, w.announced_at DESC;
 -- ============================================================================
 
 -- Weighted Score Summary by Staff Type
+-- Note: Handles missing role_title and department columns
 CREATE OR REPLACE VIEW weighted_score_summary AS
 SELECT
     cy.code AS cycle_code,
-    pt.segment,
+    CASE WHEN EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'people' AND column_name = 'segment'
+    ) THEN pt.segment ELSE NULL::staff_segment END AS segment,
     CASE 
-        WHEN pt.role_title ILIKE '%teacher%' OR pt.role_title ILIKE '%instructor%' 
-             OR pt.role_title ILIKE '%professor%' OR pt.department ILIKE '%academic%'
+        WHEN EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'role_title'
+        ) AND (
+            pt.role_title ILIKE '%teacher%' OR pt.role_title ILIKE '%instructor%' 
+            OR pt.role_title ILIKE '%professor%'
+        )
         THEN 'academic'
-        WHEN pt.role_title ILIKE '%admin%' OR pt.role_title ILIKE '%coordinator%'
-             OR pt.role_title ILIKE '%manager%' OR pt.department ILIKE '%admin%'
+        WHEN EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'department'
+        ) AND pt.department ILIKE '%academic%'
+        THEN 'academic'
+        WHEN EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'role_title'
+        ) AND (
+            pt.role_title ILIKE '%admin%' OR pt.role_title ILIKE '%coordinator%'
+            OR pt.role_title ILIKE '%manager%'
+        )
+        THEN 'admin'
+        WHEN EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'department'
+        ) AND pt.department ILIKE '%admin%'
         THEN 'admin'
         ELSE 'other'
     END AS staff_type,
@@ -139,9 +187,12 @@ FROM assignments a
 JOIN cycles cy ON cy.id = a.cycle_id
 JOIN people pt ON pt.email = a.target_email
 LEFT JOIN evaluations e ON e.assignment_id = a.id
-WHERE pt.active = TRUE
-GROUP BY cy.code, pt.segment, staff_type
-ORDER BY cycle_code, staff_type, pt.segment;
+WHERE CASE WHEN EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'people' AND column_name = 'active'
+) THEN pt.active ELSE TRUE END = TRUE
+GROUP BY cy.code, segment, staff_type
+ORDER BY cycle_code, staff_type, segment;
 
 -- ============================================================================
 -- AUDIT VIEWS
