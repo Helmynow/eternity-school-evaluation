@@ -1,0 +1,60 @@
+/* ESE Theme CSS Variables - Based on brand guidelines */
+:root {
+  /* Base font size - 18px (112.5%) */
+  font-size: 112.5%;
+
+  /* Language Division (Blues) */
+  --ese-lang-094773: #094773;
+  --ese-lang-23547b: #23547B;
+  --ese-lang-485d7b: #485D7B;
+  --ese-lang-2d7ea1: #2D7EA1;
+  --ese-lang-67a1ba: #67A1BA;
+  --ese-lang-9dc6e1: #9DC6E1;
+  --ese-lang-869fc9: #869FC9;
+
+  /* International Division (Greens) */
+  --ese-int-2c5b4c: #2C5B4C;
+  --ese-int-5d7d60: #5D7D60;
+  --ese-int-487557: #487557;
+  --ese-int-7ca48a: #7CA48A;
+  --ese-int-8eb49b: #8EB49B;
+  --ese-int-e5f6df: #E5F6DF;
+  --ese-int-86c997: #86C997;
+  --ese-int-d1dccd: #D1DCCD;
+
+  /* Accent Palette */
+  --ese-accent-terracotta: #C88167;
+  --ese-accent-mustard: #E4A740;
+  --ese-accent-olive: #B8AD7E;
+  --ese-accent-beige: #EBE1DB;
+  --ese-accent-deep-teal: #29544C;
+  --ese-accent-sage: #7CA48A;
+  --ese-accent-blue: #619FC5;
+  --ese-accent-light-blue: #A7C9D8;
+  --ese-accent-pale-sage: #D1DDCD;
+
+  /* Ink Colors */
+  --ese-ink-white: #F8F8F8;
+  --ese-ink-offwhite: #F8F0E8;
+  --ese-ink-navy: #204088;
+  --ese-ink-blue: #486898;
+  --ese-ink-green: #285848;
+
+  /* Radii */
+  --ese-radius-pill: 0.875rem;
+  --ese-radius-tile: 1.125rem;
+  --ese-radius-card: 1.125rem;
+  --ese-radius-neumorphic: 1.25rem;
+
+  /* Shadows */
+  --ese-shadow-drop: 0 0.625rem 1rem rgba(0, 0, 0, 0.12);
+  --ese-shadow-step: 0 0.25rem 0 rgba(0, 0, 0, 0.1);
+  --ese-shadow-inner-top: inset 0 0.0625rem 0 rgba(255, 255, 255, 0.55);
+  --ese-shadow-inner-bottom: inset 0 -0.0625rem 0 rgba(0, 0, 0, 0.08);
+  --ese-shadow-card-embossed: 
+    0 0.25rem 0 rgba(0, 0, 0, 0.1),
+    0 0.625rem 1rem rgba(0, 0, 0, 0.12),
+    inset 0 0.0625rem 0 rgba(255, 255, 255, 0.55),
+    inset 0 -0.0625rem 0 rgba(0, 0, 0, 0.08);
+}
+

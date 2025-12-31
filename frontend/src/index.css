@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ESE Theme Variables - Import from design system */
+@import url('./styles/ese-theme.css');
+
+@layer base {
+  * {
+    @apply border-ese-accent-beige;
+  }
+  
+  body {
+    @apply bg-ese-ink-white text-ese-ink-navy font-sans;
+    font-size: 112.5%; /* 18px base */
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+@layer components {
+  .ese-card {
+    @apply bg-white rounded-ese-card p-5;
+    box-shadow: var(--ese-shadow-card-embossed);
+    border: 0.125rem solid theme('colors.ese-accent.beige');
+  }
+  
+  .ese-button-primary {
+    @apply bg-ese-lang-900 text-white px-6 py-3 rounded-ese-pill font-medium;
+    @apply hover:bg-ese-lang-800 transition-all duration-200;
+    @apply focus-visible:outline-2 focus-visible:outline-ese-accent-light-blue focus-visible:outline-offset-2;
+  }
+  
+  .ese-button-secondary {
+    @apply bg-ese-int-500 text-white px-6 py-3 rounded-ese-pill font-medium;
+    @apply hover:bg-ese-int-600 transition-all duration-200;
+  }
+  
+  .ese-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+  
+  .ese-badge-mustard {
+    @apply bg-ese-accent-mustard text-ese-ink-navy;
+  }
+  
+  .ese-badge-terracotta {
+    @apply bg-ese-accent-terracotta text-white;
+  }
+}
+
