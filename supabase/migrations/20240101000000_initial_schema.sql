@@ -62,10 +62,7 @@ CREATE TABLE IF NOT EXISTS people (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes only if columns exist (handled in migration 20240101000004)
--- CREATE INDEX IF NOT EXISTS idx_person_segment ON people(segment);
--- CREATE INDEX IF NOT EXISTS idx_person_active ON people(active);
--- CREATE INDEX IF NOT EXISTS idx_person_department ON people(department);
+-- Indexes will be created in migration 20240101000004 after columns are added
 
 -- Weight Matrices table
 CREATE TABLE IF NOT EXISTS weight_matrices (
@@ -172,8 +169,9 @@ CREATE TABLE IF NOT EXISTS eom_nominees (
     UNIQUE(eom_cycle_id, nominee_email, category)
 );
 
-CREATE INDEX IF NOT EXISTS idx_eom_nominee_category ON eom_nominees(category);
-CREATE INDEX IF NOT EXISTS idx_eom_nominee_rotation ON eom_nominees(rotation_eligible);
+-- Indexes will be created in migration 20240101000004 after columns are added
+-- CREATE INDEX IF NOT EXISTS idx_eom_nominee_category ON eom_nominees(category);
+-- CREATE INDEX IF NOT EXISTS idx_eom_nominee_rotation ON eom_nominees(rotation_eligible);
 CREATE INDEX IF NOT EXISTS idx_eom_nominee_cycle ON eom_nominees(eom_cycle_id);
 CREATE INDEX IF NOT EXISTS idx_eom_nominee_email ON eom_nominees(nominee_email);
 
