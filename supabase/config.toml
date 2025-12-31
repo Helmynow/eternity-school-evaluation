@@ -1,8 +1,5 @@
 # Supabase Configuration for Eternity School Evaluation System
-
-[project]
-name = "eternity-school-evaluation"
-id = "ywcfqlyhesnikclesgpr"
+# This config is for local development. For remote projects, use: supabase link --project-ref ywcfqlyhesnikclesgpr
 
 [auth]
 enabled = true
@@ -39,8 +36,7 @@ file_size_limit = "50MiB"
 
 [edge_runtime]
 enabled = true
-port = 54327
 
 [functions]
-verify_jwt = true
+verify_jwt = { enabled = true }
 
