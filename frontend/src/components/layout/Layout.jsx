@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
+import AnnouncementBanner from '../common/AnnouncementBanner'
 // Logo path - public assets are served at root
 const logoPath = '/assets/media/logo-no-bound.png'
 
@@ -16,13 +17,118 @@ const Layout = ({ children }) => {
   }
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: '📊', roles: ['ceo', 'pnc', 'department_head', 'staff'] },
-    { path: '/eom/nominate', label: 'EOM Nominate', icon: '⭐', roles: ['ceo', 'pnc', 'department_head'] },
-    { path: '/eom/vote', label: 'EOM Vote', icon: '🗳️', roles: ['ceo', 'pnc', 'department_head'] },
-    { path: '/mre/evaluate', label: 'MRE Evaluate', icon: '📝', roles: ['ceo', 'pnc', 'department_head', 'staff'] },
+    { 
+      path: '/', 
+      label: 'Dashboard', 
+      icon: '/assets/icons/dashboard.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff'],
+      isDashboard: true
+    },
+    { 
+      path: '/survey', 
+      label: 'Survey', 
+      icon: '/assets/icons/assessment.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff']
+    },
+    ]
+
+  const adminNavItems = [
+    { 
+      path: '/admin/dashboard', 
+      label: 'Admin Dashboard', 
+      icon: '/assets/icons/Analytics.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/cycles', 
+      label: 'Cycles', 
+      icon: '/assets/icons/calander.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/staff', 
+      label: 'Staff', 
+      icon: '/assets/icons/users.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/objections', 
+      label: 'Objections', 
+      icon: '/assets/icons/waening_alert.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/announcements', 
+      label: 'Announcements', 
+      icon: '/assets/icons/notification.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/import', 
+      label: 'Import', 
+      icon: '/assets/icons/upload.png', 
+      roles: ['ceo', 'pnc'] 
+    },
+    { 
+      path: '/admin/integration', 
+      label: 'Integration', 
+      icon: '/assets/icons/communication.png', 
+      roles: ['ceo'] 
+    },
+    { 
+      path: '/admin/settings', 
+      label: 'Settings', 
+      icon: '/assets/icons/change.png', 
+      roles: ['ceo'] 
+    },
   ]
 
-  const filteredNavItems = navItems.filter(item => {
+  const utilityNavItems = [
+    { 
+      path: '/reports', 
+      label: 'Reports', 
+      icon: '/assets/icons/Analytics.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff'] 
+    },
+    { 
+      path: '/history', 
+      label: 'History', 
+      icon: '/assets/icons/review.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff'] 
+    },
+    { 
+      path: '/notifications', 
+      label: 'Notifications', 
+      icon: '/assets/icons/notification.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff'] 
+    },
+  ]
+
+  const allNavItems = [
+    ...navItems,
+    { 
+      path: '/eom/nominate', 
+      label: 'EOM Nominate', 
+      icon: '/assets/icons/announcments.png', 
+      roles: ['ceo', 'pnc', 'department_head'] 
+    },
+    { 
+      path: '/eom/vote', 
+      label: 'EOM Vote', 
+      icon: '/assets/icons/vote.png', 
+      roles: ['ceo', 'pnc', 'department_head'] 
+    },
+    { 
+      path: '/mre/evaluate', 
+      label: 'MRE Evaluate', 
+      icon: '/assets/icons/assessment.png', 
+      roles: ['ceo', 'pnc', 'department_head', 'staff'] 
+    },
+    ...utilityNavItems,
+    ...adminNavItems,
+  ]
+
+  const filteredNavItems = allNavItems.filter(item => {
     if (item.roles.includes('all')) return true
     if (isCEO) return true
     if (isPNC && item.roles.includes('pnc')) return true
@@ -94,36 +200,45 @@ const Layout = ({ children }) => {
         </div>
       </header>
 
-      {/* Navigation Bar - Green Band */}
-      <nav className="bg-gradient-to-b from-ese-int-500 to-ese-int-600 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-center items-center h-16 gap-4">
-            {filteredNavItems.map((item) => {
-              const isActive = location.pathname === item.path
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`
-                    flex flex-col items-center justify-center gap-1 px-4 py-2 min-w-[6.5rem]
-                    rounded-xl transition-all duration-200
-                    ${isActive
-                      ? 'bg-white text-ese-lang-900 shadow-lg transform -translate-y-0.5'
-                      : 'bg-white/20 text-white hover:bg-white/30'
-                    }
-                  `}
-                >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="text-xs font-medium">{item.label}</span>
-                </Link>
-              )
-            })}
-          </div>
+      {/* Navigation Bar - Card Style */}
+      <nav className="ese-nav-card-band">
+        <div className="ese-nav-card-container">
+          {filteredNavItems.map((item) => {
+            const isActive = location.pathname === item.path
+            const activeClass = isActive 
+              ? (item.isDashboard ? 'ese-nav-card--active-dashboard' : 'ese-nav-card--active')
+              : ''
+            
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`ese-nav-card ${activeClass}`}
+              >
+                <div className="ese-nav-card__icon">
+                  <div className="ese-nav-card__icon-graphic">
+                    <img 
+                      src={item.icon} 
+                      alt={item.label}
+                      className="ese-nav-card__icon-img"
+                      onError={(e) => {
+                        // Fallback if icon doesn't load
+                        e.target.style.display = 'none'
+                        e.target.parentElement.innerHTML = `<span style="font-size: 1.5rem;">${item.label.charAt(0)}</span>`
+                      }}
+                    />
+                  </div>
+                </div>
+                <span className="ese-nav-card__label">{item.label}</span>
+              </Link>
+            )
+          })}
         </div>
       </nav>
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        <AnnouncementBanner />
         {children}
       </main>
 

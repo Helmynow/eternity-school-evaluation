@@ -23,14 +23,12 @@ class StaffSegment(enum.Enum):
 
 
 class EOMCategory(enum.Enum):
-    """EOM nomination categories"""
-    ACADEMIC = "academic"
-    ADMIN = "admin"
-    SUPPORT = "support"
-    LEADERSHIP = "leadership"
+    """EOM nomination categories - matching original design"""
+    OUTSTANDING_LEADERSHIP = "outstanding_leadership"
+    TEAM_SPIRIT = "team_spirit"
     INNOVATION = "innovation"
-    COLLABORATION = "collaboration"
-    STUDENT_ENGAGEMENT = "student_engagement"
+    RISING_STAR = "rising_star"
+    SERVICE_EXCELLENCE = "service_excellence"
 
 
 class ActionType(enum.Enum):
@@ -83,6 +81,13 @@ class Person(Base):
     eom_nominations = relationship("EOMNominee", foreign_keys="EOMNominee.nominee_email", back_populates="nominee_person")
     eom_nominated_by = relationship("EOMNominee", foreign_keys="EOMNominee.nominated_by", back_populates="nominator_person")
     audit_logs = relationship("AuditLog", foreign_keys="AuditLog.user_email", back_populates="user")
+    survey_responses = relationship("SurveyResponse", foreign_keys="SurveyResponse.respondent_email", back_populates="respondent")
+    notifications = relationship("Notification", foreign_keys="Notification.recipient_email", back_populates="recipient")
+    objections_submitted = relationship("Objection", foreign_keys="Objection.submitted_by", back_populates="submitter")
+    objections_resolved = relationship("Objection", foreign_keys="Objection.resolved_by", back_populates="resolver")
+    variance_alerts = relationship("VarianceAlert", foreign_keys="VarianceAlert.target_email", back_populates="target")
+    feedback_submitted = relationship("Feedback", foreign_keys="Feedback.submitted_by", back_populates="submitter")
+    feedback_reviewed = relationship("Feedback", foreign_keys="Feedback.reviewed_by", back_populates="reviewer")
     
     __table_args__ = (
         Index('idx_person_segment', 'segment'),
@@ -320,6 +325,339 @@ class Evaluation(Base):
     )
 
 
+class EmailNotification(Base):
+    """Email notifications tracking"""
+    __tablename__ = 'email_notifications'
+    
+    id = Column(Integer, primary_key=True)
+    notification_type = Column(String(50), nullable=False)
+    recipient_email = Column(String(255), ForeignKey('people.email'))
+    subject = Column(String(500))
+    body = Column(Text)
+    status = Column(String(20), default='pending')  # pending, sent, failed
+    sent_at = Column(DateTime)
+    error_message = Column(Text)
+    related_entity_type = Column(String(50))
+    related_entity_id = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_email_notification_recipient', 'recipient_email'),
+        Index('idx_email_notification_type', 'notification_type'),
+        Index('idx_email_notification_status', 'status'),
+    )
+
+
+class SurveyIdentityPreference(Base):
+    """Survey identity preferences - stores user's identity mode choice"""
+    __tablename__ = 'survey_identity_preferences'
+    
+    id = Column(Integer, primary_key=True)
+    user_email = Column(String(255), ForeignKey('people.email'), nullable=False)
+    survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=True)  # NULL = global preference
+    identity_mode = Column(String(20), nullable=False)  # anonymous, identified, conditional
+    privacy_level = Column(String(20))  # maximum, high, medium, low
+    retention_days = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_survey_identity_user', 'user_email'),
+        Index('idx_survey_identity_survey', 'survey_id'),
+        Index('idx_survey_identity_mode', 'identity_mode'),
+    )
+
+
+class SurveyIdentityReveal(Base):
+    """Survey identity reveals - tracks when and how identity was revealed"""
+    __tablename__ = 'survey_identity_reveals'
+    
+    id = Column(Integer, primary_key=True)
+    user_email = Column(String(255), ForeignKey('people.email'), nullable=False)
+    survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=True)
+    reveal_method = Column(String(50), nullable=False)  # full, partial_role, partial_department, gradual, consent_based
+    revealed_info = Column(JSON)  # What information was revealed
+    target = Column(String(255))  # Who the reveal was for (optional)
+    consent_confirmed = Column(Boolean, default=False)
+    next_reveal_date = Column(DateTime)  # For gradual reveals
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_survey_reveal_user', 'user_email'),
+        Index('idx_survey_reveal_survey', 'survey_id'),
+        Index('idx_survey_reveal_method', 'reveal_method'),
+    )
+
+
+class SurveyConditionalReveal(Base):
+    """Survey conditional reveal configurations"""
+    __tablename__ = 'survey_conditional_reveals'
+    
+    id = Column(Integer, primary_key=True)
+    user_email = Column(String(255), ForeignKey('people.email'), nullable=False)
+    survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=True)
+    reveal_conditions = Column(JSON)  # Stored conditions configuration
+    trigger_events = Column(JSON)  # Stored trigger events configuration
+    notification_preferences = Column(JSON)  # Stored notification preferences
+    status = Column(String(20), default='active')  # active, paused, completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_survey_conditional_user', 'user_email'),
+        Index('idx_survey_conditional_survey', 'survey_id'),
+        Index('idx_survey_conditional_status', 'status'),
+    )
+
+
+class EOMFeedback(Base):
+    """EOM feedback collection"""
+    __tablename__ = 'eom_feedback'
+    
+    id = Column(Integer, primary_key=True)
+    eom_cycle_id = Column(Integer, ForeignKey('eom_cycles.id'), nullable=False)
+    feedback_type = Column(String(50), nullable=False)  # 'nominee', 'nominator', 'voter'
+    person_email = Column(String(255), ForeignKey('people.email'))
+    feedback_text = Column(Text, nullable=False)
+    rating = Column(Integer)  # 1-5 scale
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_eom_feedback_cycle', 'eom_cycle_id'),
+        Index('idx_eom_feedback_person', 'person_email'),
+        Index('idx_eom_feedback_type', 'feedback_type'),
+    )
+
+
+class Survey(Base):
+    """Survey definitions"""
+    __tablename__ = 'surveys'
+    
+    id = Column(Integer, primary_key=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    survey_type = Column(String(50))  # 'comprehensive', 'climate', 'feedback', etc.
+    status = Column(String(20), default='draft')  # draft, active, closed
+    start_date = Column(Date)
+    end_date = Column(Date)
+    created_by = Column(String(255), ForeignKey('people.email'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    questions = relationship("SurveyQuestion", back_populates="survey", cascade="all, delete-orphan")
+    responses = relationship("SurveyResponse", back_populates="survey", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index('idx_survey_status', 'status'),
+        Index('idx_survey_type', 'survey_type'),
+        Index('idx_survey_dates', 'start_date', 'end_date'),
+    )
+
+
+class SurveyQuestion(Base):
+    """Survey questions with metadata"""
+    __tablename__ = 'survey_questions'
+    
+    id = Column(Integer, primary_key=True)
+    survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=False)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(50))  # 'multiple_choice', 'text', 'rating', 'yes_no', etc.
+    category = Column(String(100))  # 'physical_environment', 'workplace_culture', etc.
+    section = Column(String(100))
+    order_index = Column(Integer, default=0)
+    required = Column(Boolean, default=True)
+    identity_modes = Column(JSON)  # List of identity modes this question is available for
+    sensitivity_level = Column(String(20))  # 'low', 'medium', 'high', 'very_high'
+    options = Column(JSON)  # For multiple choice questions
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    survey = relationship("Survey", back_populates="questions")
+    responses = relationship("SurveyResponse", back_populates="question")
+    
+    __table_args__ = (
+        Index('idx_survey_question_survey', 'survey_id'),
+        Index('idx_survey_question_category', 'category'),
+        Index('idx_survey_question_order', 'survey_id', 'order_index'),
+    )
+
+
+class SurveyResponse(Base):
+    """Survey responses with identity mode tracking"""
+    __tablename__ = 'survey_responses'
+    
+    id = Column(Integer, primary_key=True)
+    survey_id = Column(Integer, ForeignKey('surveys.id'), nullable=False)
+    question_id = Column(Integer, ForeignKey('survey_questions.id'), nullable=False)
+    respondent_email = Column(String(255), ForeignKey('people.email'), nullable=True)  # NULL for anonymous
+    anonymous_id = Column(String(255))  # For anonymous responses
+    session_id = Column(String(255))  # Survey session ID
+    identity_mode = Column(String(20))  # 'anonymous', 'conditional', 'partial', 'identified'
+    response_text = Column(Text)
+    response_value = Column(JSON)  # For structured responses
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    survey = relationship("Survey", back_populates="responses")
+    question = relationship("SurveyQuestion", back_populates="responses")
+    respondent = relationship("Person", foreign_keys=[respondent_email], back_populates="survey_responses")
+    
+    __table_args__ = (
+        Index('idx_survey_response_survey', 'survey_id'),
+        Index('idx_survey_response_question', 'question_id'),
+        Index('idx_survey_response_respondent', 'respondent_email'),
+        Index('idx_survey_response_anonymous', 'anonymous_id'),
+        Index('idx_survey_response_session', 'session_id'),
+        Index('idx_survey_response_mode', 'identity_mode'),
+    )
+
+
+class Notification(Base):
+    """In-app notifications"""
+    __tablename__ = 'notifications'
+    
+    id = Column(Integer, primary_key=True)
+    recipient_email = Column(String(255), ForeignKey('people.email'), nullable=False)
+    notification_type = Column(String(50), nullable=False)  # 'evaluation_due', 'eom_nomination', 'bias_alert', etc.
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    read = Column(Boolean, default=False)
+    read_at = Column(DateTime)
+    action_url = Column(String(500))  # URL to navigate to when clicked
+    related_entity_type = Column(String(50))  # 'evaluation', 'eom_nominee', etc.
+    related_entity_id = Column(Integer)
+    priority = Column(String(20), default='normal')  # 'low', 'normal', 'high', 'urgent'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    recipient = relationship("Person", foreign_keys=[recipient_email], back_populates="notifications")
+    
+    __table_args__ = (
+        Index('idx_notification_recipient', 'recipient_email'),
+        Index('idx_notification_read', 'read'),
+        Index('idx_notification_type', 'notification_type'),
+        Index('idx_notification_created', 'created_at'),
+        Index('idx_notification_priority', 'priority'),
+    )
+
+
+class Objection(Base):
+    """Objections/Appeals system"""
+    __tablename__ = 'objections'
+    
+    id = Column(Integer, primary_key=True)
+    submitted_by = Column(String(255), ForeignKey('people.email'), nullable=False)
+    objection_type = Column(String(50), nullable=False)  # 'evaluation', 'eom_nomination', 'score', etc.
+    related_entity_type = Column(String(50), nullable=False)
+    related_entity_id = Column(Integer, nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(String(20), default='pending')  # pending, under_review, resolved, rejected
+    resolution_notes = Column(Text)
+    resolved_by = Column(String(255), ForeignKey('people.email'))
+    resolved_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    submitter = relationship("Person", foreign_keys=[submitted_by])
+    resolver = relationship("Person", foreign_keys=[resolved_by])
+    
+    __table_args__ = (
+        Index('idx_objection_submitter', 'submitted_by'),
+        Index('idx_objection_status', 'status'),
+        Index('idx_objection_type', 'objection_type'),
+        Index('idx_objection_entity', 'related_entity_type', 'related_entity_id'),
+    )
+
+
+class VarianceAlert(Base):
+    """Variance alert tracking"""
+    __tablename__ = 'variance_alerts'
+    
+    id = Column(Integer, primary_key=True)
+    cycle_id = Column(Integer, ForeignKey('cycles.id'), nullable=False)
+    alert_type = Column(String(50), nullable=False)  # 'bias', 'participation', 'scoring', etc.
+    severity = Column(String(20), default='medium')  # 'low', 'medium', 'high', 'critical'
+    target_email = Column(String(255), ForeignKey('people.email'))
+    description = Column(Text, nullable=False)
+    details = Column(JSON)  # Additional alert details
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_by = Column(String(255), ForeignKey('people.email'))
+    acknowledged_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    cycle = relationship("Cycle")
+    target = relationship("Person", foreign_keys=[target_email])
+    
+    __table_args__ = (
+        Index('idx_variance_alert_cycle', 'cycle_id'),
+        Index('idx_variance_alert_type', 'alert_type'),
+        Index('idx_variance_alert_severity', 'severity'),
+        Index('idx_variance_alert_acknowledged', 'acknowledged'),
+    )
+
+
+class Announcement(Base):
+    """System announcements"""
+    __tablename__ = 'announcements'
+    
+    id = Column(Integer, primary_key=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    author_email = Column(String(255), ForeignKey('people.email'))
+    priority = Column(String(20), default='normal')  # low, normal, high, urgent
+    target_audience = Column(String(50), default='all')  # all, ceo, pnc, department_head, staff
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    author = relationship("Person", foreign_keys=[author_email])
+    
+    __table_args__ = (
+        Index('idx_announcements_active', 'is_active'),
+        Index('idx_announcements_priority', 'priority'),
+        Index('idx_announcements_audience', 'target_audience'),
+    )
+
+
+class Feedback(Base):
+    """General feedback collection (separate from EOMFeedback)"""
+    __tablename__ = 'feedback'
+    
+    id = Column(Integer, primary_key=True)
+    submitted_by = Column(String(255), ForeignKey('people.email'), nullable=False)
+    feedback_type = Column(String(50), nullable=False)  # 'system', 'process', 'feature', 'general'
+    category = Column(String(100))  # 'ui', 'performance', 'functionality', etc.
+    title = Column(String(200))
+    message = Column(Text, nullable=False)
+    rating = Column(Integer)  # 1-5 scale
+    status = Column(String(20), default='new')  # new, reviewed, addressed, closed
+    reviewed_by = Column(String(255), ForeignKey('people.email'))
+    reviewed_at = Column(DateTime)
+    response = Column(Text)  # Response from admin
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    submitter = relationship("Person", foreign_keys=[submitted_by])
+    reviewer = relationship("Person", foreign_keys=[reviewed_by])
+    
+    __table_args__ = (
+        Index('idx_feedback_submitter', 'submitted_by'),
+        Index('idx_feedback_type', 'feedback_type'),
+        Index('idx_feedback_status', 'status'),
+        Index('idx_feedback_category', 'category'),
+    )
+
+
 class Database:
     """Database connection and session management"""
     
@@ -329,7 +667,21 @@ class Database:
                 'DATABASE_URL',
                 'postgresql://user:password@localhost/eternity_eval'
             )
-        self.engine = create_engine(database_url, echo=False)
+        # Production-ready connection pooling
+        pool_size = int(os.getenv('DB_POOL_SIZE', '10'))
+        max_overflow = int(os.getenv('DB_MAX_OVERFLOW', '20'))
+        pool_timeout = int(os.getenv('DB_POOL_TIMEOUT', '30'))
+        pool_recycle = int(os.getenv('DB_POOL_RECYCLE', '3600'))
+        
+        self.engine = create_engine(
+            database_url,
+            echo=False,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_recycle=pool_recycle,
+            pool_pre_ping=True,  # Verify connections before using
+        )
         self.SessionLocal = sessionmaker(bind=self.engine)
     
     def create_tables(self):
@@ -344,3 +696,26 @@ class Database:
         """Close database connection"""
         self.engine.dispose()
 
+
+def get_db_session(database_url: str = None):
+    """
+    Convenience helper to create a database session.
+    
+    Usage:
+        db = get_db_session()
+        try:
+            # Use db session
+            result = db.query(Model).all()
+        finally:
+            db.close()
+    
+    Or use as context manager:
+        with get_db_session() as db:
+            result = db.query(Model).all()
+    """
+    db_instance = Database(database_url)
+    session = db_instance.get_session()
+    # Make session act as context manager
+    session.__enter__ = lambda: session
+    session.__exit__ = lambda exc_type, exc_val, exc_tb: session.close()
+    return session
