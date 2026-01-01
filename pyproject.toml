@@ -1,3 +1,10 @@
+[project]
+name = "eternity-school-evaluation"
+version = "2.0.0"
+description = "Employee of the Month & Multi-Rater Evaluation System"
+requires-python = ">=3.11"
+dependencies = []
+
 [tool.black]
 line-length = 127
 target-version = ['py312']
