@@ -10,34 +10,21 @@ import { onCLS, onFCP, onLCP, onTTFB, onINP } from 'web-vitals'
  * Send performance metrics to analytics endpoint
  */
 const sendToAnalytics = (metric) => {
-  // Send to your analytics endpoint
+  // Send to your analytics endpoint (disabled - endpoint not implemented yet)
   const endpoint = '/api/v2/analytics/performance'
   
-  // In production, send to your backend
-  if (import.meta.env.PROD) {
-    fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: metric.name,
-        value: metric.value,
-        id: metric.id,
-        delta: metric.delta,
-        rating: metric.rating,
-        navigationType: metric.navigationType,
-        url: window.location.href,
-        timestamp: Date.now(),
-      }),
-      keepalive: true, // Send even if page is unloading
-    }).catch(console.error)
-  } else {
-    // Log in development
+  // Log in development only - don't send to backend until endpoint is implemented
+  if (!import.meta.env.PROD) {
     console.log('Performance Metric:', {
       name: metric.name,
       value: metric.value,
       rating: metric.rating,
     })
   }
+  // TODO: Implement /api/v2/analytics/performance endpoint before enabling
+  // if (import.meta.env.PROD && endpoint_exists) {
+  //   fetch(endpoint, { ... }).catch(console.error)
+  // }
 
   // Also send to Sentry if available
   if (window.Sentry) {
