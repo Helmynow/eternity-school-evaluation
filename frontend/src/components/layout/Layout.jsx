@@ -54,7 +54,7 @@ const Layout = ({ children }) => {
     { 
       path: '/admin/objections', 
       label: 'Objections', 
-      icon: '/assets/icons/waening_alert.png', 
+      icon: '/assets/icons/warning_alert.png', 
       roles: ['ceo', 'pnc'] 
     },
     { 

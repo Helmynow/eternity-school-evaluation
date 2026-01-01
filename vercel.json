@@ -2,14 +2,25 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/fastapi_app.py",
-      "use": "@vercel/python"
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.11"
+      }
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "frontend/dist"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/fastapi_app.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
@@ -17,6 +28,9 @@
     }
   ],
   "env": {
-    "PYTHON_VERSION": "3.11"
+    "PYTHON_VERSION": "3.11",
+    "PIP_NO_CACHE_DIR": "off",
+    "PIP_DISABLE_PIP_VERSION_CHECK": "on",
+    "PIP_DEFAULT_TIMEOUT": "100"
   }
 }

@@ -31,7 +31,7 @@ except (ImportError, Exception):
     MCPIntegration = None
 
 # Sentry configuration
-SENTRY_DSN = os.getenv("SENTRY_DSN", "https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120")
+SENTRY_DSN = os.getenv("SENTRY_DSN")  # No default - must be set via environment variable
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
 
@@ -52,23 +52,27 @@ integrations = [
 if MCP_AVAILABLE and MCPIntegration:
     integrations.append(MCPIntegration())
 
-sentry_sdk.init(
-    dsn=SENTRY_DSN,
-    environment=ENVIRONMENT,
-    integrations=integrations,
-    traces_sample_rate=_get_sample_rate(
-        os.getenv("SENTRY_TRACES_SAMPLE_RATE"),
-        DEFAULT_TRACE_RATE
-    ),
-    profile_session_sample_rate=_get_sample_rate(
-        os.getenv("SENTRY_PROFILES_SAMPLE_RATE"),
-        DEFAULT_PROFILE_RATE
-    ),
-    profile_lifecycle="trace",
-    send_default_pii=True,  # Enable PII collection for LLM data
-    release=os.getenv("APP_VERSION", "2.0.0"),
-    before_send=lambda event, hint: None if "/health" in event.get("request", {}).get("url", "") else event,
-)
+# Only initialize Sentry if DSN is provided
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=ENVIRONMENT,
+        integrations=integrations,
+        traces_sample_rate=_get_sample_rate(
+            os.getenv("SENTRY_TRACES_SAMPLE_RATE"),
+            DEFAULT_TRACE_RATE
+        ),
+        profile_session_sample_rate=_get_sample_rate(
+            os.getenv("SENTRY_PROFILES_SAMPLE_RATE"),
+            DEFAULT_PROFILE_RATE
+        ),
+        profile_lifecycle="trace",
+        send_default_pii=os.getenv("SENTRY_SEND_DEFAULT_PII", "false").lower() == "true",  # Default to False for security
+        release=os.getenv("APP_VERSION", "2.0.0"),
+        before_send=lambda event, hint: None if "/health" in event.get("request", {}).get("url", "") else event,
+    )
+else:
+    print("Sentry DSN not set. Skipping Sentry initialization.")
 
 from backend.database import (
     Database, Cycle, Person, Assignment, Evaluation, EOMCycle, EOMNominee, 
