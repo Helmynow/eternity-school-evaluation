@@ -50,12 +50,11 @@ DROP POLICY IF EXISTS "Assignments are updatable by service role" ON assignments
 CREATE POLICY "Users can view their own assignments"
     ON assignments FOR SELECT
     USING (
-        (select auth.role()) = 'authenticated' AND (
+        ((select auth.role()) = 'authenticated' AND (
             rater_email = (select auth.email()) OR 
-            target_email = (select auth.email()) OR
-            (select auth.role()) = 'service_role'
-        )
-    ) OR (select auth.role()) = 'service_role';
+            target_email = (select auth.email())
+        )) OR (select auth.role()) = 'service_role'
+    );
 
 CREATE POLICY "Assignments are insertable by service role"
     ON assignments FOR INSERT

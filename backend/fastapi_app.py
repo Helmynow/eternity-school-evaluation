@@ -31,7 +31,7 @@ except (ImportError, Exception):
     MCPIntegration = None
 
 # Sentry configuration
-SENTRY_DSN = os.getenv("SENTRY_DSN")
+SENTRY_DSN = os.getenv("SENTRY_DSN", "https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
 
@@ -44,33 +44,31 @@ def _get_sample_rate(env_value: Optional[str], default_value: float) -> float:
 DEFAULT_TRACE_RATE = 1.0 if not IS_PRODUCTION else 0.1
 DEFAULT_PROFILE_RATE = 1.0 if not IS_PRODUCTION else 0.0
 
-if SENTRY_DSN:
-    integrations = [
-        FastApiIntegration(),
-        SqlalchemyIntegration(),
-    ]
-    if MCP_AVAILABLE and MCPIntegration:
-        integrations.append(MCPIntegration())
-    
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=ENVIRONMENT,
-        integrations=integrations,
-        traces_sample_rate=_get_sample_rate(
-            os.getenv("SENTRY_TRACES_SAMPLE_RATE"),
-            DEFAULT_TRACE_RATE
-        ),
-        profile_session_sample_rate=_get_sample_rate(
-            os.getenv("SENTRY_PROFILES_SAMPLE_RATE"),
-            DEFAULT_PROFILE_RATE
-        ),
-        profile_lifecycle="trace",
-        send_default_pii=os.getenv("SENTRY_SEND_PII", "false").lower() in ("1", "true", "yes"),
-        release=os.getenv("APP_VERSION", "2.0.0"),
-        before_send=lambda event, hint: None if "/health" in event.get("request", {}).get("url", "") else event,
-    )
-else:
-    print("Sentry DSN not set. Skipping Sentry initialization.")
+# Initialize Sentry SDK
+integrations = [
+    FastApiIntegration(),
+    SqlalchemyIntegration(),
+]
+if MCP_AVAILABLE and MCPIntegration:
+    integrations.append(MCPIntegration())
+
+sentry_sdk.init(
+    dsn=SENTRY_DSN,
+    environment=ENVIRONMENT,
+    integrations=integrations,
+    traces_sample_rate=_get_sample_rate(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE"),
+        DEFAULT_TRACE_RATE
+    ),
+    profile_session_sample_rate=_get_sample_rate(
+        os.getenv("SENTRY_PROFILES_SAMPLE_RATE"),
+        DEFAULT_PROFILE_RATE
+    ),
+    profile_lifecycle="trace",
+    send_default_pii=True,  # Enable PII collection for LLM data
+    release=os.getenv("APP_VERSION", "2.0.0"),
+    before_send=lambda event, hint: None if "/health" in event.get("request", {}).get("url", "") else event,
+)
 
 from backend.database import (
     Database, Cycle, Person, Assignment, Evaluation, EOMCycle, EOMNominee, 
