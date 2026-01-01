@@ -112,11 +112,19 @@ CREATE POLICY "EOM cycles are viewable by authenticated users"
     ON eom_cycles FOR SELECT
     USING ((select auth.role()) = 'authenticated');
 
--- Write operations: service_role only (INSERT/UPDATE/DELETE, not SELECT)
-CREATE POLICY "EOM cycles are modifiable by service role"
-    ON eom_cycles FOR INSERT, UPDATE, DELETE
+-- Write operations: service_role only (separate policies for each operation)
+CREATE POLICY "EOM cycles are insertable by service role"
+    ON eom_cycles FOR INSERT
+    WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM cycles are updatable by service role"
+    ON eom_cycles FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM cycles are deletable by service role"
+    ON eom_cycles FOR DELETE
+    USING ((select auth.role()) = 'service_role');
 
 -- EOM Voters policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Users can view EOM voters" ON eom_voters;
@@ -128,10 +136,18 @@ CREATE POLICY "Users can view EOM voters"
     USING ((select auth.role()) = 'authenticated');
 
 -- Write operations: service_role only
-CREATE POLICY "EOM voters are modifiable by service role"
-    ON eom_voters FOR INSERT, UPDATE, DELETE
+CREATE POLICY "EOM voters are insertable by service role"
+    ON eom_voters FOR INSERT
+    WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM voters are updatable by service role"
+    ON eom_voters FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM voters are deletable by service role"
+    ON eom_voters FOR DELETE
+    USING ((select auth.role()) = 'service_role');
 
 -- EOM Nominees policies
 DROP POLICY IF EXISTS "EOM nominees are viewable by authenticated users" ON eom_nominees;
@@ -163,10 +179,18 @@ CREATE POLICY "EOM winners are viewable by authenticated users"
     USING ((select auth.role()) = 'authenticated');
 
 -- Write operations: service_role only
-CREATE POLICY "EOM winners are modifiable by service role"
-    ON eom_winners FOR INSERT, UPDATE, DELETE
+CREATE POLICY "EOM winners are insertable by service role"
+    ON eom_winners FOR INSERT
+    WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM winners are updatable by service role"
+    ON eom_winners FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "EOM winners are deletable by service role"
+    ON eom_winners FOR DELETE
+    USING ((select auth.role()) = 'service_role');
 
 -- EOM Rotation Rules policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Rotation rules are viewable by authenticated users" ON eom_rotation_rules;
@@ -178,10 +202,18 @@ CREATE POLICY "Rotation rules are viewable by authenticated users"
     USING ((select auth.role()) = 'authenticated');
 
 -- Write operations: service_role only
-CREATE POLICY "Rotation rules are modifiable by service role"
-    ON eom_rotation_rules FOR INSERT, UPDATE, DELETE
+CREATE POLICY "Rotation rules are insertable by service role"
+    ON eom_rotation_rules FOR INSERT
+    WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "Rotation rules are updatable by service role"
+    ON eom_rotation_rules FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "Rotation rules are deletable by service role"
+    ON eom_rotation_rules FOR DELETE
+    USING ((select auth.role()) = 'service_role');
 
 -- Weight Matrices policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Weight matrices are viewable by authenticated users" ON weight_matrices;
@@ -193,10 +225,18 @@ CREATE POLICY "Weight matrices are viewable by authenticated users"
     USING ((select auth.role()) = 'authenticated');
 
 -- Write operations: service_role only
-CREATE POLICY "Weight matrices are modifiable by service role"
-    ON weight_matrices FOR INSERT, UPDATE, DELETE
+CREATE POLICY "Weight matrices are insertable by service role"
+    ON weight_matrices FOR INSERT
+    WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "Weight matrices are updatable by service role"
+    ON weight_matrices FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
+
+CREATE POLICY "Weight matrices are deletable by service role"
+    ON weight_matrices FOR DELETE
+    USING ((select auth.role()) = 'service_role');
 
 -- Audit Logs policies
 DROP POLICY IF EXISTS "Audit logs are viewable by service role only" ON audit_logs;
@@ -227,10 +267,18 @@ BEGIN
             USING ((select auth.role()) = 'authenticated');
         
         -- Write operations: service_role only
-        CREATE POLICY "eval_rater_rules_modify"
-            ON eval_rater_rules FOR INSERT, UPDATE, DELETE
+        CREATE POLICY "eval_rater_rules_insert"
+            ON eval_rater_rules FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "eval_rater_rules_update"
+            ON eval_rater_rules FOR UPDATE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "eval_rater_rules_delete"
+            ON eval_rater_rules FOR DELETE
+            USING ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
@@ -247,10 +295,18 @@ BEGIN
             USING ((select auth.role()) = 'authenticated');
         
         -- Write operations: service_role only
-        CREATE POLICY "eval_domain_rules_modify"
-            ON eval_domain_rules FOR INSERT, UPDATE, DELETE
+        CREATE POLICY "eval_domain_rules_insert"
+            ON eval_domain_rules FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "eval_domain_rules_update"
+            ON eval_domain_rules FOR UPDATE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "eval_domain_rules_delete"
+            ON eval_domain_rules FOR DELETE
+            USING ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
@@ -267,10 +323,18 @@ BEGIN
             USING ((select auth.role()) = 'authenticated');
         
         -- Write operations: service_role only
-        CREATE POLICY "voters_modify"
-            ON voters FOR INSERT, UPDATE, DELETE
+        CREATE POLICY "voters_insert"
+            ON voters FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "voters_update"
+            ON voters FOR UPDATE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "voters_delete"
+            ON voters FOR DELETE
+            USING ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
@@ -287,10 +351,18 @@ BEGIN
             USING ((select auth.role()) = 'authenticated');
         
         -- Write operations: service_role only
-        CREATE POLICY "winners_modify"
-            ON winners FOR INSERT, UPDATE, DELETE
+        CREATE POLICY "winners_insert"
+            ON winners FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "winners_update"
+            ON winners FOR UPDATE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "winners_delete"
+            ON winners FOR DELETE
+            USING ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
@@ -307,10 +379,18 @@ BEGIN
             USING ((select auth.role()) = 'authenticated');
         
         -- Write operations: service_role only
-        CREATE POLICY "school_terms_modify"
-            ON school_terms FOR INSERT, UPDATE, DELETE
+        CREATE POLICY "school_terms_insert"
+            ON school_terms FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "school_terms_update"
+            ON school_terms FOR UPDATE
             USING ((select auth.role()) = 'service_role')
             WITH CHECK ((select auth.role()) = 'service_role');
+        
+        CREATE POLICY "school_terms_delete"
+            ON school_terms FOR DELETE
+            USING ((select auth.role()) = 'service_role');
     END IF;
 END $$;
 
