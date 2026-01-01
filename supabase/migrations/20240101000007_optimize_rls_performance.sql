@@ -72,14 +72,14 @@ DROP POLICY IF EXISTS "Users can update their own evaluations" ON evaluations;
 CREATE POLICY "Users can view evaluations for their assignments"
     ON evaluations FOR SELECT
     USING (
-        (select auth.role()) = 'authenticated' AND (
+        ((select auth.role()) = 'authenticated' AND (
             EXISTS (
                 SELECT 1 FROM assignments a
                 WHERE a.id = evaluations.assignment_id
                   AND (a.rater_email = (select auth.email()) OR a.target_email = (select auth.email()))
             )
-        )
-    ) OR (select auth.role()) = 'service_role';
+        )) OR (select auth.role()) = 'service_role'
+    );
 
 CREATE POLICY "Users can create evaluations for their assignments"
     ON evaluations FOR INSERT
