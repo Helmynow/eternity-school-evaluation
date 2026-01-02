@@ -29,7 +29,7 @@ const ActionItems = ({ items }) => {
       // Try to get action items from admin dashboard first
       let items = []
       try {
-        const dashboardRes = await apiClient.admin.getDashboard(user?.email)
+        const dashboardRes = await apiClient.admin.getDashboard()
         if (dashboardRes.data?.action_items) {
           items = dashboardRes.data.action_items
         }
@@ -48,7 +48,7 @@ const ActionItems = ({ items }) => {
 
         // Get unread notifications as action items
         const notificationsRes = await apiClient.notifications.getAll()
-        const unreadNotifications = (notificationsRes.data || []).filter((n) => !n.is_read)
+        const unreadNotifications = (notificationsRes.data || []).filter((n) => !n.read)
 
         // Combine into action items
         items = [
@@ -102,7 +102,7 @@ const ActionItems = ({ items }) => {
     try {
       if (item.type === 'notification') {
         const notificationId = item.id.replace('notification-', '')
-        await apiClient.notifications.markRead(notificationId)
+        await apiClient.notifications.markRead(parseInt(notificationId, 10))
       } else if (item.type === 'objection') {
         // Objections are handled separately, just remove from view
       }

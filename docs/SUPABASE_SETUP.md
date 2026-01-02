@@ -257,6 +257,15 @@ If you want to use Supabase Auth:
    - Enable email provider
    - Configure OAuth providers if needed
 
+2. **Configure URL redirects**
+   - Set **Site URL** to your production frontend (e.g. your Vercel domain)
+   - Add your frontend URLs to **Additional Redirect URLs** (include `/**` if you want deep links)
+   - See Supabase’s redirect allow-list guidance: https://supabase.com/docs/guides/auth/redirect-urls
+
+3. **Make auth emails reliable (recommended)**
+   - Supabase’s built-in email is best-effort; for production, configure a **custom SMTP** provider (Resend, SendGrid, etc.)
+   - Dashboard: Authentication → Email Templates / SMTP settings (naming may vary)
+
 2. **Use in Frontend**
    ```javascript
    import { createClient } from '@supabase/supabase-js'

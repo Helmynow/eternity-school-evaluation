@@ -18,8 +18,29 @@ const showErrorOnce = (message, key) => {
 }
 
 // Create axios instance with base configuration
+// IMPORTANT:
+// - In production, we must NOT default to localhost, otherwise the deployed app will try to call
+//   `http://localhost:8000` from users' browsers and fail with ERR_CONNECTION_REFUSED.
+// - In dev, we still want a sensible default to the local FastAPI server.
+const apiBaseURL = (() => {
+  const envUrl = (import.meta.env.VITE_API_URL || '').trim()
+  if (envUrl) {
+    // Guard against accidentally setting a localhost URL in production builds.
+    if (import.meta.env.PROD && /(?:^|\/\/)(?:localhost|127\.0\.0\.1)(?::\d+)?/.test(envUrl)) {
+      return ''
+    }
+    return envUrl
+  }
+
+  // Default to local backend for development only.
+  if (import.meta.env.DEV) return 'http://localhost:8000'
+
+  // Production: use same-origin relative paths.
+  return ''
+})()
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: apiBaseURL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -245,6 +266,12 @@ export const apiClient = {
     
     // Get current cycle
     getCurrent: () => api.get('/api/v2/cycles/current'),
+
+    // Create cycle (admin only)
+    create: (data) => api.post('/api/v2/cycles', data),
+
+    // Update cycle (admin only)
+    update: (id, data) => api.put(`/api/v2/cycles/${id}`, data),
   },
   
   // People/Staff
@@ -257,6 +284,12 @@ export const apiClient = {
     
     // Get staff by segment
     getBySegment: (segment) => api.get(`/api/v2/people/segment/${segment}`),
+
+    // Create staff member (admin only)
+    create: (data) => api.post('/api/v2/people', data),
+
+    // Update staff member (admin only)
+    update: (email, data) => api.put(`/api/v2/people/${encodeURIComponent(email)}`, data),
   },
   
   // Staff Evaluator Management
@@ -305,8 +338,12 @@ export const apiClient = {
   
   // Survey Templates
   surveyTemplates: {
-    getComprehensive: () => api.get('/api/v2/survey-templates/comprehensive'),
-    getSection: (category) => api.get(`/api/v2/survey-templates/section/${category}`),
+    getComprehensive: (identityMode = 'identified') => api.get('/api/v2/survey-templates/comprehensive', {
+      params: { identity_mode: identityMode }
+    }),
+    getSection: (category, identityMode = 'identified') => api.get(`/api/v2/survey-templates/section/${category}`, {
+      params: { identity_mode: identityMode }
+    }),
   },
   
   // Identity Preferences (alias for surveyIdentity for backward compatibility)
@@ -338,7 +375,7 @@ export const apiClient = {
   
   // Admin Dashboard
   admin: {
-    getDashboard: (adminId) => api.get('/api/v2/admin/dashboard', { params: { admin_id: adminId } }),
+    getDashboard: () => api.get('/api/v2/admin/dashboard'),
     getOverviewCards: () => api.get('/api/v2/admin/dashboard/overview-cards'),
     getRealTimeMetrics: () => api.get('/api/v2/admin/dashboard/real-time-metrics'),
     getIdentityAnalytics: () => api.get('/api/v2/admin/dashboard/identity-analytics'),
@@ -348,14 +385,22 @@ export const apiClient = {
   integration: {
     setupHR: (config) => api.post('/api/v2/integration/hr/setup', config),
     getEvaluationBridge: () => api.get('/api/v2/integration/evaluation-bridge'),
-    syncStaff: () => api.post('/api/v2/integration/sync/staff'),
-    syncEvaluation: () => api.post('/api/v2/integration/sync/evaluation'),
+    syncStaff: (staffData) => api.post('/api/v2/integration/sync/staff', staffData),
+    syncEvaluation: (evaluationData) => api.post('/api/v2/integration/sync/evaluation', evaluationData),
   },
   
   // System Setup
   system: {
     setup: (config) => api.post('/api/v2/system/setup', config),
     getGoLiveChecklist: () => api.get('/api/v2/system/go-live-checklist'),
+  },
+
+  // Bulk Import
+  import: {
+    staff: (formData) => api.post('/api/v2/import/staff', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    eomVoters: (formData, params) => api.post('/api/v2/import/eom-voters', formData, { params, headers: { 'Content-Type': 'multipart/form-data' } }),
+    eomCandidates: (formData) => api.post('/api/v2/import/eom-candidates', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    weightMatrix: (formData, params) => api.post('/api/v2/import/weight-matrix', formData, { params, headers: { 'Content-Type': 'multipart/form-data' } }),
   },
   
   // Analytics
@@ -364,6 +409,11 @@ export const apiClient = {
     getBias: (cycleId) => api.get(`/api/v2/analytics/bias/${cycleId}`),
     getEOM: (cycleId) => api.get(`/api/v2/analytics/eom/${cycleId}`),
     getMRE: (cycleId) => api.get(`/api/v2/analytics/mre/${cycleId}`),
+  },
+
+  // Audit Logs
+  auditLogs: {
+    getAll: (params) => api.get('/api/v2/audit-logs', { params }),
   },
   
   // Notifications
@@ -398,20 +448,6 @@ export const apiClient = {
     exportCEO: (cycleId, format) => api.post(`/api/v2/reports/ceo/export`, { cycle_id: cycleId, format }),
     getBias: (cycleId) => api.get(`/api/v2/reports/bias/${cycleId}`),
     getParticipation: (cycleId) => api.get(`/api/v2/reports/participation/${cycleId}`),
-  },
-  
-  // Survey Templates
-  surveyTemplates: {
-    getComprehensive: () => api.get('/api/v2/survey-templates/comprehensive'),
-    getSection: (category) => api.get(`/api/v2/survey-templates/section/${category}`),
-  },
-  
-  // Identity Preferences
-  identityPreferences: {
-    setPreference: (data) => api.post('/api/v2/survey/identity/preference', data),
-    getPreference: (userEmail, surveyId) => api.get(`/api/v2/survey/identity/status/${userEmail}`, {
-      params: surveyId ? { survey_id: surveyId } : {}
-    }),
   },
   
   // Admin Settings

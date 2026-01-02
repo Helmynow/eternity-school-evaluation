@@ -39,6 +39,10 @@ const IntegrationHub = lazy(() => import('./components/admin/IntegrationHub'))
 
 function App() {
   const { user, loading } = useAuth()
+  // If a user lands via Supabase password recovery (type=recovery), force them onto the reset page.
+  // Supabase can redirect to the site root depending on template/config, so we handle it client-side.
+  const isRecoveryFlow =
+    typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')
 
   if (loading) {
     return (
@@ -58,6 +62,10 @@ function App() {
       {!user ? (
         <Suspense fallback={<LoadingSkeleton type="dashboard" count={1} />}>
           <Routes>
+            <Route
+              path="/"
+              element={<Navigate to={isRecoveryFlow ? '/reset-password' : '/login'} replace />}
+            />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -69,7 +77,7 @@ function App() {
           <Suspense fallback={<LoadingSkeleton type="dashboard" count={1} />}>
             <Layout>
               <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={isRecoveryFlow ? <ResetPassword /> : <Dashboard />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/eom/nominate" element={<EOMNomination />} />
             <Route path="/eom/vote" element={<EOMNomination mode="vote" />} />

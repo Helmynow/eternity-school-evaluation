@@ -11,9 +11,7 @@ const EOMFeedbackForm = ({ cycleId }) => {
   const [rating, setRating] = useState(5)
   const [submitted, setSubmitted] = useState(false)
 
-  const { mutate: submitFeedback, loading } = useMutation(
-    (data) => apiClient.post('/api/v2/eom/feedback', data)
-  )
+  const { mutate: submitFeedback, loading } = useMutation(apiClient.eom.submitFeedback)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -27,7 +25,6 @@ const EOMFeedbackForm = ({ cycleId }) => {
       await submitFeedback({
         eom_cycle_id: cycleId,
         feedback_type: feedbackType,
-        person_email: user?.email,
         feedback_text: feedbackText,
         rating: rating
       })
@@ -46,7 +43,7 @@ const EOMFeedbackForm = ({ cycleId }) => {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
           <div className="mb-4">
-            <img src="/assets/icons/success.png" alt="Success" className="w-16 h-16 mx-auto" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div className="text-4xl mb-4">✅</div>' }} />
+            <img src="/assets/icons/approved.png" alt="Success" className="w-16 h-16 mx-auto" />
           </div>
           <h3 className="text-xl font-heading font-semibold text-green-800 mb-2">
             Feedback Submitted Successfully

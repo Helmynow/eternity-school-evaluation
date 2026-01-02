@@ -6,6 +6,7 @@ Tests various edge cases and validation scenarios.
 from datetime import date
 
 import pytest
+from sqlalchemy import text
 
 from backend.database import Cycle, Database, EOMCategory, EOMCycle, EOMNominee, EOMWinner, Person
 from backend.eom_validation import EOMNominationValidator
@@ -13,10 +14,14 @@ from tests.test_data.eom_test_data_generator import EOMTestDataGenerator, TestNo
 
 
 @pytest.fixture(scope="module")
-def test_db():
+def test_db(test_database_url):
     """Create test database session"""
-    db = Database()
-    session = db.get_session()
+    db = Database(test_database_url)
+    try:
+        session = db.get_session()
+        session.execute(text("SELECT 1"))
+    except Exception:
+        pytest.skip("Postgres test database not available; set DATABASE_URL or start local Postgres to run these tests")
     yield session
     session.close()
 

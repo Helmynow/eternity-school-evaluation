@@ -3,8 +3,14 @@
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://eternity-school-evaluation.vercel.app"]
+# Vite defaults to 5173 for local dev
+site_url = "http://localhost:5173"
+# Allow local dev + Vercel deployments (use wildcards to support deep links + preview URLs)
+additional_redirect_urls = [
+  "http://localhost:5173/**",
+  "https://eternity-school-evaluation-eternity-school-of-egypt.vercel.app/**",
+  "https://eternity-school-evaluation.vercel.app/**",
+]
 jwt_expiry = 3600
 enable_signup = true
 

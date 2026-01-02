@@ -45,11 +45,11 @@ const IdentityModeSelector = ({ onSelect, initialMode = null, surveyId = null })
   }, [surveyId, fetchPreference, normalizedInitialMode])
 
   useEffect(() => {
-    const nextMode = normalizedInitialMode || normalizeMode(preference?.identity_mode)
+    const nextMode = normalizedInitialMode || normalizeMode(preference?.current_mode)
     if (nextMode) {
       setSelectedMode((prev) => (prev === nextMode ? prev : nextMode))
     }
-  }, [normalizedInitialMode, preference?.identity_mode])
+  }, [normalizedInitialMode, preference?.current_mode])
 
   const handleSelect = (mode) => {
     if (mode === selectedMode) return

@@ -61,6 +61,31 @@ export const useAuth = () => {
   }
 
   const resetPassword = async (email) => {
+    // Prefer backend-driven recovery so we can use reliable SMTP delivery when configured.
+    // Backend also falls back to Supabase's built-in /recover flow if SMTP isn't configured.
+    try {
+      const envUrl = (import.meta.env.VITE_API_URL || '').trim()
+      const apiBase =
+        envUrl && !(import.meta.env.PROD && /(?:^|\/\/)(?:localhost|127\.0\.0\.1)(?::\d+)?/.test(envUrl))
+          ? envUrl
+          : window.location.origin
+      const res = await fetch(`${apiBase}/api/v2/auth/password-recovery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+
+      if (res.ok) {
+        const payload = await res.json().catch(() => null)
+        // If backend reports it couldn't perform recovery (misconfigured), fall back to client-side Supabase.
+        if (payload?.provider && payload.provider !== 'none') {
+          return { data: payload, error: null }
+        }
+      }
+    } catch (e) {
+      // Ignore and fall back to Supabase client recovery.
+    }
+
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })

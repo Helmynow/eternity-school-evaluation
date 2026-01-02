@@ -137,9 +137,7 @@ const SmartNomineeSearch = ({
           className="w-full px-4 py-3 pl-10 border border-ese-accent-beige rounded-lg focus:ring-2 focus:ring-ese-lang-500 focus:border-ese-lang-500 outline-none"
         />
         <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-          <svg className="w-5 h-5 text-ese-ink-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <img src="/assets/icons/search.png" alt="" className="w-5 h-5" />
         </div>
         {value && (
           <button
@@ -147,9 +145,7 @@ const SmartNomineeSearch = ({
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ese-ink-blue hover:text-ese-ink-navy"
             title="Clear selection"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
           </button>
         )}
       </div>
@@ -263,11 +259,9 @@ const SmartNomineeSearch = ({
                         </div>
                       </div>
                       {isSelected && (
-                        <div className="ml-2 text-ese-accent-mustard">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        </div>
+                        <span className="ml-2 text-xs px-2 py-1 rounded-full bg-ese-accent-mustard/20 text-ese-ink-navy">
+                          Selected
+                        </span>
                       )}
                     </div>
                   </button>

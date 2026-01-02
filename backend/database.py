@@ -705,6 +705,50 @@ class Feedback(Base):
     )
 
 
+class SystemSetting(Base):
+    """Global (singleton) system settings configured by the CEO"""
+
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    email_notifications = Column(Boolean, default=True)
+    auto_activate_cycles = Column(Boolean, default=False)
+    require_approval = Column(Boolean, default=True)
+    default_rotation_period = Column(String(20), default="term")  # term, quarter, month, year
+    max_nominations_per_person = Column(Integer, default=1)
+    evaluation_deadline_days = Column(Integer, default=30)
+    updated_by = Column(String(255), ForeignKey("people.email"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    updater = relationship("Person", foreign_keys=[updated_by])
+
+
+class HybridIdentitySession(Base):
+    """Persisted Hybrid Identity sessions for cross-request reliability"""
+
+    __tablename__ = "hybrid_identity_sessions"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    user_email = Column(String(255), ForeignKey("people.email"), nullable=False)
+    identity_mode = Column(String(20), nullable=False)
+    survey_id = Column(Integer, ForeignKey("surveys.id"))
+    permissions = Column(JSON, default=dict)
+    consent_granted = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_activity = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime)
+
+    user = relationship("Person", foreign_keys=[user_email])
+    survey = relationship("Survey", foreign_keys=[survey_id])
+
+    __table_args__ = (
+        Index("idx_hybrid_identity_sessions_user", "user_email"),
+        Index("idx_hybrid_identity_sessions_survey", "survey_id"),
+    )
+
+
 class Database:
     """Database connection and session management"""
 

@@ -23,7 +23,9 @@ const ForgotPassword = () => {
         return
       }
 
-      toast.success('Password reset email sent. Please check your inbox.')
+      // Supabase intentionally does not reveal whether an email exists in the system.
+      // So this can succeed even if no email is delivered (unknown email / spam / SMTP issues).
+      toast.success("If an account exists for that email, you'll receive a reset link shortly. Please check spam/junk.")
     } catch (err) {
       toast.error('An unexpected error occurred. Please try again.')
     } finally {
@@ -54,6 +56,10 @@ const ForgotPassword = () => {
           <p className="text-sm text-ese-ink-blue text-center mb-6">
             Enter your email and we’ll send you a password reset link.
           </p>
+          <div className="mb-4 text-xs text-ese-ink-blue bg-ese-ink-offwhite rounded-lg p-3 border border-ese-accent-beige">
+            If you don’t receive an email within a few minutes, check your spam/junk folder. For security reasons, we
+            can’t confirm whether an email address is registered.
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

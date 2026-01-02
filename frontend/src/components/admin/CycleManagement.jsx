@@ -34,25 +34,13 @@ const CycleManagement = () => {
 
   const { mutate: createCycle, loading: creating } = useMutation(
     async (data) => {
-      const response = await fetch('http://localhost:8000/api/cycles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      if (!response.ok) throw new Error('Failed to create cycle')
-      return response.json()
+      return apiClient.cycles.create(data)
     }
   )
 
   const { mutate: updateCycle, loading: updating } = useMutation(
     async ({ id, data }) => {
-      const response = await fetch(`http://localhost:8000/api/cycles/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      if (!response.ok) throw new Error('Failed to update cycle')
-      return response.json()
+      return apiClient.cycles.update(id, data)
     }
   )
 
@@ -97,15 +85,11 @@ const CycleManagement = () => {
       // Deactivate all other cycles first
       const otherCycles = cycles.filter(c => c.id !== cycle.id && c.status === 'active')
       for (const c of otherCycles) {
-        await fetch(`http://localhost:8000/api/cycles/${c.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'draft' })
-        })
+        await apiClient.cycles.update(c.id, { status: 'draft' })
       }
       
       // Activate this cycle
-      await updateCycle({ id: cycle.id, data: { ...cycle, status: 'active' } }, {
+      await updateCycle({ id: cycle.id, data: { status: 'active' } }, {
         onSuccess: () => {
           toast.success(`Cycle "${cycle.name}" activated`)
           refetchCycles()

@@ -31,9 +31,8 @@ export const useIdentityPreferences = (surveyId = null) => {
   // Set identity preference
   const setPreferenceMutation = useMutation(async (preferenceData) => {
     const response = await apiClient.surveyIdentity.setPreference({
-      user_email: user?.email,
       survey_id: surveyId,
-      ...preferenceData,
+      preference: preferenceData?.preference,
     })
     setPreference(response.data)
     toast.success('Identity preference saved')

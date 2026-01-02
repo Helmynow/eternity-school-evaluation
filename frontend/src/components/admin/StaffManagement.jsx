@@ -27,11 +27,8 @@ const StaffManagement = () => {
   // Fetch staff
   const fetchStaff = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/people')
-      if (response.ok) {
-        const data = await response.json()
-        setStaff(data)
-      }
+      const response = await apiClient.people.getAll()
+      setStaff(response.data || [])
     } catch (error) {
       toast.error('Failed to load staff')
     } finally {
@@ -45,19 +42,19 @@ const StaffManagement = () => {
 
   const handleCreate = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/people', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-      
-      if (response.ok) {
+      if (editingStaff) {
+        await apiClient.people.update(editingStaff.email, formData)
+        toast.success('Staff member updated successfully')
+      } else {
+        await apiClient.people.create(formData)
         toast.success('Staff member added successfully')
-        setShowCreateModal(false)
-        resetForm()
-        fetchStaff()
-        
-        // Auto-create evaluator assignments if admin or academic
+      }
+      setShowCreateModal(false)
+      resetForm()
+      fetchStaff()
+      
+      // Auto-create evaluator assignments only for newly created staff
+      if (!editingStaff) {
         try {
           const currentCycle = await apiClient.cycles.getCurrent()
           if (currentCycle.data) {
@@ -71,12 +68,9 @@ const StaffManagement = () => {
           console.warn('Could not auto-create assignments:', evalError)
           // Don't fail the whole operation if assignment creation fails
         }
-      } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to add staff member')
       }
     } catch (error) {
-      toast.error('Failed to add staff member')
+      toast.error(error.response?.data?.detail || 'Failed to save staff member')
     }
   }
 
@@ -85,20 +79,11 @@ const StaffManagement = () => {
     
     try {
       // Soft delete by setting active to false
-      const response = await fetch(`http://localhost:8000/api/people/${encodeURIComponent(email)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: false })
-      })
-      
-      if (response.ok) {
-        toast.success('Staff member removed')
-        fetchStaff()
-      } else {
-        toast.error('Failed to remove staff member')
-      }
+      await apiClient.people.update(email, { active: false })
+      toast.success('Staff member removed')
+      fetchStaff()
     } catch (error) {
-      toast.error('Failed to remove staff member')
+      toast.error(error.response?.data?.detail || 'Failed to remove staff member')
     }
   }
 
@@ -106,8 +91,8 @@ const StaffManagement = () => {
     const file = event.target.files[0]
     if (!file) return
 
-    if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx')) {
-      toast.error('Please upload a CSV or Excel file')
+    if (!file.name.endsWith('.xlsx')) {
+      toast.error('Please upload an Excel (.xlsx) file')
       return
     }
 
@@ -115,22 +100,13 @@ const StaffManagement = () => {
     formData.append('file', file)
 
     try {
-      const response = await fetch('http://localhost:8000/api/people/bulk', {
-        method: 'POST',
-        body: formData
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        toast.success(`Successfully imported ${result.count || 0} staff members`)
-        setShowBulkUpload(false)
-        fetchStaff()
-      } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to upload staff')
-      }
+      const response = await apiClient.import.staff(formData)
+      const result = response.data
+      toast.success(`Successfully imported ${result.count || 0} staff members`)
+      setShowBulkUpload(false)
+      fetchStaff()
     } catch (error) {
-      toast.error('Failed to upload staff file')
+      toast.error(error.response?.data?.detail || 'Failed to upload staff file')
     }
   }
 

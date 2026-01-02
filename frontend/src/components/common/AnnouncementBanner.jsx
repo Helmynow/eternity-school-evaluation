@@ -20,7 +20,6 @@ const AnnouncementBanner = () => {
     try {
       const response = await apiClient.announcements.getAll({
         is_active: true,
-        user_email: user.email
       })
       
       const activeAnnouncements = (response.data?.data || []).filter(
@@ -77,9 +76,7 @@ const AnnouncementBanner = () => {
               className="ml-4 text-ese-ink-medium hover:text-ese-ink-navy"
               aria-label="Dismiss announcement"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
             </button>
           </div>
         </div>

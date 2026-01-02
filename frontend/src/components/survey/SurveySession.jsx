@@ -78,10 +78,8 @@ const SurveySession = () => {
       if (user?.email) {
         try {
           await apiClient.surveyIdentity.setPreference({
-            user_email: user.email,
             survey_id: parseInt(surveyId),
-            identity_mode: mode,
-            privacy_level: mode === 'anonymous' ? 'maximum' : mode === 'conditional' ? 'high' : 'low',
+            preference: mode,
           })
         } catch (prefError) {
           // Don't fail if preference save fails, just log it
@@ -91,7 +89,6 @@ const SurveySession = () => {
       
       // Initialize hybrid identity session
       const sessionRes = await apiClient.hybridIdentity.initializeSession({
-        user_email: user?.email,
         preferred_mode: mode,
         survey_id: parseInt(surveyId),
       })
@@ -105,7 +102,6 @@ const SurveySession = () => {
 
       // Create survey session
       const surveySessionRes = await apiClient.hybridIdentity.createSurveySession({
-        user_email: user?.email,
         survey_type: survey?.survey_type || 'comprehensive',
         session_token: sessionRes.data.session_token || sessionRes.data.sessionToken,
       })
@@ -161,7 +157,6 @@ const SurveySession = () => {
           const responseData = {
             survey_id: parseInt(surveyId),
             question_id: parseInt(questionId),
-            respondent_email: identityMode === 'identified' ? user?.email : null,
             anonymous_id: identityMode === 'anonymous' ? `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : null,
             session_id: `direct_${Date.now()}`,
             identity_mode: identityMode || 'identified',

@@ -3,6 +3,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "============================================================================"
 echo "Running Supabase Database Migrations"
 echo "============================================================================"
@@ -26,17 +29,32 @@ if ! supabase projects list &> /dev/null; then
     supabase login
 fi
 
-# Check if project is linked
-if [ ! -f ".supabase/config.toml" ]; then
+# Verify this is a Supabase project (expects ./supabase/config.toml)
+if [ ! -f "supabase/config.toml" ]; then
+    echo "❌ supabase/config.toml not found!"
+    echo "Run this script from the Eternity School Evaluation project root."
+    exit 1
+fi
+
+PROJECT_REF="${SUPABASE_PROJECT_REF:-ywcfqlyhesnikclesgpr}"
+
+# Link (CLI v2 stores linked ref in supabase/.temp/project-ref).
+LINKED=false
+if [ -f "supabase/.temp/project-ref" ]; then
+  LINKED=true
+elif [ -f ".supabase/config.toml" ]; then
+  LINKED=true
+fi
+
+if [ "$LINKED" != "true" ]; then
     echo "⚠️  Project not linked"
-    echo "Linking to project: ywcfqlyhesnikclesgpr"
-    supabase link --project-ref ywcfqlyhesnikclesgpr
+    echo "Linking to project: ${PROJECT_REF}"
+    supabase link --project-ref "${PROJECT_REF}"
 fi
 
 # Push migrations
 echo "Pushing migrations to Supabase..."
-cd supabase
-supabase db push
+supabase db push --yes
 
 echo ""
 echo "✅ Migrations completed successfully!"

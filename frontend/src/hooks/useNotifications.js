@@ -14,9 +14,7 @@ export const useNotifications = (autoFetch = true) => {
     if (!user?.email) return []
     setLoading(true)
     try {
-      const response = await apiClient.notifications.getAll({
-        user_email: user.email
-      })
+      const response = await apiClient.notifications.getAll()
       setNotifications(response.data || [])
       return response.data
     } catch (error) {
@@ -32,9 +30,7 @@ export const useNotifications = (autoFetch = true) => {
   const fetchUnreadCount = useCallback(async () => {
     if (!user?.email) return 0
     try {
-      const response = await apiClient.notifications.getUnreadCount({
-        user_email: user.email
-      })
+      const response = await apiClient.notifications.getUnreadCount()
       const count = response.data?.unread_count || 0
       setUnreadCount(count)
       return count
@@ -48,9 +44,7 @@ export const useNotifications = (autoFetch = true) => {
   const markAsRead = useCallback(async (id) => {
     if (!user?.email) return
     try {
-      await apiClient.notifications.markRead(id, {
-        user_email: user.email
-      })
+      await apiClient.notifications.markRead(id)
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       )
@@ -64,9 +58,7 @@ export const useNotifications = (autoFetch = true) => {
   const markAllAsRead = useCallback(async () => {
     if (!user?.email) return
     try {
-      await apiClient.notifications.markAllRead({
-        user_email: user.email
-      })
+      await apiClient.notifications.markAllRead()
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       setUnreadCount(0)
       toast.success('All notifications marked as read')
@@ -79,9 +71,7 @@ export const useNotifications = (autoFetch = true) => {
   const markMultipleAsRead = useCallback(async (ids) => {
     if (!user?.email) return
     try {
-      await apiClient.notifications.markMultipleRead(ids, {
-        user_email: user.email
-      })
+      await apiClient.notifications.markMultipleRead(ids)
       setNotifications((prev) =>
         prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n))
       )

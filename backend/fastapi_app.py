@@ -4,13 +4,16 @@ Provides high-performance API endpoints for evaluation processing.
 """
 
 import csv
+import hashlib
 import io
 import json
 import os
+import requests
 import secrets
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 # Initialize Sentry SDK before FastAPI app
 import sentry_sdk
@@ -87,6 +90,7 @@ from backend.database import ActionType as DBActionType
 from backend.database import (
     Announcement,
     Assignment,
+    AuditLog,
     Cycle,
     Database,
     EOMCategory,
@@ -95,6 +99,7 @@ from backend.database import (
     EOMVoter,
     Evaluation,
     Feedback,
+    HybridIdentitySession,
     Notification,
     Objection,
     Person,
@@ -102,6 +107,7 @@ from backend.database import (
     Survey,
     SurveyQuestion,
     SurveyResponse,
+    SystemSetting,
     VarianceAlert,
     WeightMatrix,
 )
@@ -116,6 +122,7 @@ from backend.survey_identity_manager import SurveyIdentityManager
 from backend.survey_templates import EternitySchoolSurveyTemplates
 from backend.system_setup import EternitySchoolSystemSetup
 from backend.weight_matrix_handler import WeightMatrixHandler
+from backend.auth import SupabaseAuthError, decode_supabase_jwt, extract_bearer_token
 
 # Initialize FastAPI app
 DOCS_ENABLED = os.getenv("ENABLE_DOCS", "false" if IS_PRODUCTION else "true").lower() in ("1", "true", "yes")
@@ -143,6 +150,9 @@ from backend.task_scheduler import task_scheduler
 @app.on_event("startup")
 async def startup_event():
     """Start the task scheduler on application startup"""
+    # Fail fast in production if auth is required but JWT verification isn't configured.
+    if IS_PRODUCTION and REQUIRE_SUPABASE_AUTH and not SUPABASE_JWT_SECRET:
+        raise RuntimeError("SUPABASE_JWT_SECRET must be set when REQUIRE_SUPABASE_AUTH is enabled in production")
     try:
         task_scheduler.start()
         task_scheduler.schedule_daily_tasks()
@@ -164,29 +174,139 @@ async def shutdown_event():
 # Authentication configuration
 REQUIRE_API_KEY = os.getenv("REQUIRE_API_KEY", "false").lower() in ("1", "true", "yes")
 API_KEY = os.getenv("ESE_API_KEY") or os.getenv("API_KEY")
+REQUIRE_SUPABASE_AUTH = os.getenv("REQUIRE_SUPABASE_AUTH", "true" if IS_PRODUCTION else "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("JWT_SECRET")
+SUPABASE_JWT_AUD = (os.getenv("SUPABASE_JWT_AUD") or "authenticated").strip() or None
 PUBLIC_PATHS = {
     "/api/v2/health",
     "/api/v2/health/simple",
+    "/api/v2/health/config",
+    "/api/v2/auth/password-recovery",
     "/docs",
     "/redoc",
     "/openapi.json",
 }
 
+def _require_authenticated_email(request: Request) -> str:
+    email = getattr(request.state, "user_email", None)
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return email
+
+
+def _require_admin_access(request: Request, db: Session) -> str:
+    """Admin access (CEO/P&C or super admin)."""
+    from backend.rbac_system import RBACSystem
+
+    user_email = _require_authenticated_email(request)
+    rbac = RBACSystem(db)
+    role = rbac.get_user_role(user_email)
+    if not (rbac.is_super_admin(user_email) or role in ("ceo", "pnc")):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user_email
+
+
+def _hash_session_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _get_hybrid_session(db: Session, session_token: str) -> Optional[HybridIdentitySession]:
+    token_hash = _hash_session_token(session_token)
+    return db.query(HybridIdentitySession).filter(HybridIdentitySession.token_hash == token_hash).first()
+
+
+def _store_hybrid_session(
+    db: Session,
+    session_token: str,
+    user_email: str,
+    identity_mode: str,
+    survey_id: Optional[int],
+    permissions: Optional[Dict[str, Any]] = None,
+    consent_granted: Optional[Dict[str, Any]] = None,
+    expires_at: Optional[datetime] = None,
+) -> None:
+    token_hash = _hash_session_token(session_token)
+    existing = db.query(HybridIdentitySession).filter(HybridIdentitySession.token_hash == token_hash).first()
+    if existing:
+        existing.user_email = user_email
+        existing.identity_mode = identity_mode
+        existing.survey_id = survey_id
+        existing.permissions = permissions or {}
+        existing.consent_granted = consent_granted or {}
+        existing.last_activity = datetime.utcnow()
+        existing.expires_at = expires_at
+        return
+
+    session_row = HybridIdentitySession(
+        token_hash=token_hash,
+        user_email=user_email,
+        identity_mode=identity_mode,
+        survey_id=survey_id,
+        permissions=permissions or {},
+        consent_granted=consent_granted or {},
+        last_activity=datetime.utcnow(),
+        expires_at=expires_at,
+    )
+    db.add(session_row)
+
 
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
-    if not REQUIRE_API_KEY:
+    """
+    Production security gate:
+    - Optional API key (x-api-key) for additional hardening
+    - Optional Supabase JWT auth (Authorization: Bearer <token>) for user identity
+    """
+    # Let CORS preflight pass
+    if request.method == "OPTIONS":
         return await call_next(request)
 
+    # Public endpoints bypass auth
     if request.url.path in PUBLIC_PATHS:
         return await call_next(request)
 
-    if not API_KEY:
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": "API key not configured"})
+    # Optional API key protection
+    if REQUIRE_API_KEY:
+        if not API_KEY:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": "API key not configured"}
+            )
 
-    provided_key = request.headers.get("x-api-key")
-    if not provided_key or not secrets.compare_digest(provided_key, API_KEY):
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Unauthorized"})
+        provided_key = request.headers.get("x-api-key")
+        if not provided_key or not secrets.compare_digest(provided_key, API_KEY):
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Unauthorized"})
+
+    # Supabase JWT authentication (recommended for production)
+    auth_header = request.headers.get("Authorization")
+    token = extract_bearer_token(auth_header)
+
+    auth_ctx = None
+    if token and SUPABASE_JWT_SECRET:
+        try:
+            auth_ctx = decode_supabase_jwt(token, jwt_secret=SUPABASE_JWT_SECRET, audience=SUPABASE_JWT_AUD)
+        except SupabaseAuthError as exc:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": str(exc)})
+
+    if REQUIRE_SUPABASE_AUTH:
+        if not SUPABASE_JWT_SECRET:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": "Supabase JWT secret not configured (SUPABASE_JWT_SECRET)"},
+            )
+        if not token:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Authentication required"})
+        if not auth_ctx:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Invalid token"})
+
+    if auth_ctx:
+        request.state.user_email = auth_ctx.email
+        request.state.user_id = auth_ctx.user_id
+        request.state.auth_role = auth_ctx.role
+        request.state.jwt_claims = auth_ctx.claims
 
     return await call_next(request)
 
@@ -280,12 +400,12 @@ class EOMNominationRequest(BaseModel):
 
     nominee_email: EmailStr
     eom_cycle_id: int
-    nominated_by: EmailStr
-    nomination_reason: Optional[str] = None
+    nominated_by: Optional[EmailStr] = None  # always derived from auth in production
+    nomination_reason: Optional[str] = Field(None, alias="reason")
     category: Optional[EOMCategory] = None
     check_attendance: bool = True
 
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
 
 class EOMNominationResponse(BaseModel):
@@ -296,6 +416,14 @@ class EOMNominationResponse(BaseModel):
     errors: List[str]
     warnings: List[str]
     details: Dict[str, Any]
+
+
+class EOMVoteRequest(BaseModel):
+    """Request model for EOM vote submission"""
+
+    eom_cycle_id: int
+    nominee_email: EmailStr
+    voter_email: Optional[EmailStr] = None  # ignored; derived from auth in production
 
 
 class MREEvaluationRequest(BaseModel):
@@ -370,6 +498,53 @@ class CEOReportRequest(BaseModel):
 # EOM Nomination Endpoints
 # ============================================================================
 
+def _resolve_eom_cycle_id(db: Session, cycle_or_eom_cycle_id: int) -> int:
+    """
+    Accepts either an EOMCycle.id or a Cycle.id and returns a valid EOMCycle.id.
+
+    The frontend historically passes the current Cycle id; for production robustness we:
+    - use the provided id directly if it matches an existing EOMCycle
+    - otherwise, treat it as Cycle.id and pick (or create) the latest EOMCycle for that Cycle
+    """
+    # Direct match (EOMCycle.id)
+    existing = db.query(EOMCycle).filter(EOMCycle.id == cycle_or_eom_cycle_id).first()
+    if existing:
+        return existing.id
+
+    # Treat as Cycle.id
+    cycle = db.query(Cycle).filter(Cycle.id == cycle_or_eom_cycle_id).first()
+    if not cycle:
+        raise HTTPException(status_code=404, detail="EOM cycle not found")
+
+    latest = (
+        db.query(EOMCycle)
+        .filter(EOMCycle.cycle_id == cycle.id)
+        .order_by(EOMCycle.year.desc(), EOMCycle.month.desc())
+        .first()
+    )
+    if latest:
+        return latest.id
+
+    # Bootstrap a cycle for the current month/year
+    now = datetime.utcnow()
+    new_cycle = EOMCycle(cycle_id=cycle.id, month=now.month, year=now.year, status="draft")
+    db.add(new_cycle)
+    db.commit()
+    db.refresh(new_cycle)
+    return new_cycle.id
+
+
+def _require_eom_access(request: Request, db: Session) -> str:
+    """EOM nominate/vote is restricted to leadership roles."""
+    from backend.rbac_system import RBACSystem
+
+    user_email = _require_authenticated_email(request)
+    rbac = RBACSystem(db)
+    role = rbac.get_user_role(user_email)
+    if not (rbac.is_super_admin(user_email) or role in ("ceo", "pnc", "department_head")):
+        raise HTTPException(status_code=403, detail="EOM access required")
+    return user_email
+
 
 @app.post("/api/v2/eom/nominations/suggest-category")
 async def suggest_eom_category(
@@ -391,7 +566,10 @@ async def suggest_eom_category(
 
 @app.post("/api/v2/eom/nominations/submit", response_model=EOMNominationResponse)
 async def submit_eom_nomination(
-    nomination: EOMNominationRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+    nomination: EOMNominationRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
 ):
     """
     Submit an EOM nomination with comprehensive validation.
@@ -405,6 +583,9 @@ async def submit_eom_nomination(
     If category is not provided, automatically suggests one based on nomination_reason.
     """
     try:
+        nominator_email = _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, nomination.eom_cycle_id)
+
         # Initialize validator and recommender
         validator = EOMNominationValidator(db)
         audit_logger = AuditLogger(db)
@@ -440,8 +621,8 @@ async def submit_eom_nomination(
         # Validate nomination
         validation_result = validator.validate_nomination(
             nominee_email=nomination.nominee_email,
-            eom_cycle_id=nomination.eom_cycle_id,
-            nominated_by=nomination.nominated_by,
+            eom_cycle_id=resolved_eom_cycle_id,
+            nominated_by=nominator_email,
             category=nomination.category.value if nomination.category else None,
             check_attendance=nomination.check_attendance,
         )
@@ -458,9 +639,9 @@ async def submit_eom_nomination(
 
         # Create nomination if valid
         eom_nominee = EOMNominee(
-            eom_cycle_id=nomination.eom_cycle_id,
+            eom_cycle_id=resolved_eom_cycle_id,
             nominee_email=nomination.nominee_email,
-            nominated_by=nomination.nominated_by,
+            nominated_by=nominator_email,
             nomination_reason=nomination.nomination_reason,
             category=nomination.category,  # EOMCategory enum
             rotation_eligible=True,
@@ -476,7 +657,7 @@ async def submit_eom_nomination(
             audit_logger.log_create,
             "eom_nominee",
             eom_nominee.id,
-            nomination.nominated_by,
+            nominator_email,
             f"Submitted EOM nomination for {nomination.nominee_email}",
         )
 
@@ -498,19 +679,21 @@ async def submit_eom_nomination(
 
 
 @app.post("/api/v2/eom/nominations/validate")
-async def validate_eom_nomination(nomination: EOMNominationRequest, db: Session = Depends(get_db)):
+async def validate_eom_nomination(nomination: EOMNominationRequest, request: Request, db: Session = Depends(get_db)):
     """
     Validate an EOM nomination without submitting it.
     Uses comprehensive rotation rules validation.
     Useful for pre-submission validation.
     """
     try:
+        nominator_email = _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, nomination.eom_cycle_id)
         validator = EOMNominationValidator(db)
 
         validation_result = validator.validate_nomination(
             nominee_email=nomination.nominee_email,
-            eom_cycle_id=nomination.eom_cycle_id,
-            nominated_by=nomination.nominated_by,
+            eom_cycle_id=resolved_eom_cycle_id,
+            nominated_by=nominator_email,
             category=nomination.category.value if nomination.category else None,
             check_attendance=nomination.check_attendance,
         )
@@ -529,23 +712,26 @@ async def validate_eom_nomination(nomination: EOMNominationRequest, db: Session 
 @app.post("/api/v2/eom/nominations/batch-validate")
 async def validate_batch_nominations(
     nominations: List[EOMNominationRequest],
+    request: Request,
     eom_cycle_id: int = Query(..., description="EOM cycle ID for all nominations"),
     db: Session = Depends(get_db),
 ):
     """Validate multiple EOM nominations at once"""
     try:
+        nominator_email = _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, eom_cycle_id)
         validator = EOMNominationValidator(db)
 
         nomination_dicts = [
             {
                 "nominee_email": n.nominee_email,
-                "nominated_by": n.nominated_by,
+                "nominated_by": nominator_email,
                 "category": n.category.value if n.category else None,
             }
             for n in nominations
         ]
 
-        results = validator.validate_batch_nominations(nomination_dicts, eom_cycle_id)
+        results = validator.validate_batch_nominations(nomination_dicts, resolved_eom_cycle_id)
 
         return {
             "total_nominations": len(nominations),
@@ -559,6 +745,104 @@ async def validate_batch_nominations(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating batch nominations: {str(e)}")
+
+
+@app.get("/api/v2/eom/nominations/cycle/{cycle_id}")
+async def list_eom_nominations_for_cycle(cycle_id: int, request: Request, db: Session = Depends(get_db)):
+    """List EOM nominations for the current EOM cycle (cycle_id may be Cycle.id or EOMCycle.id)."""
+    try:
+        _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, cycle_id)
+
+        nominations = (
+            db.query(EOMNominee)
+            .filter(EOMNominee.eom_cycle_id == resolved_eom_cycle_id)
+            .order_by(EOMNominee.created_at.desc())
+            .all()
+        )
+
+        return [
+            {
+                "id": n.id,
+                "eom_cycle_id": n.eom_cycle_id,
+                "nominee_email": n.nominee_email,
+                "nominee_name": n.nominee_person.full_name if n.nominee_person else None,
+                "nominated_by": n.nominated_by,
+                "nomination_reason": n.nomination_reason,
+                "category": n.category.value if hasattr(n.category, "value") else n.category,
+                "votes_received": n.votes_received,
+                "created_at": n.created_at.isoformat() if n.created_at else None,
+            }
+            for n in nominations
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching nominations: {str(e)}")
+
+
+@app.post("/api/v2/eom/vote")
+async def submit_eom_vote(vote: EOMVoteRequest, request: Request, db: Session = Depends(get_db)):
+    """Submit a single EOM vote (one vote per user per EOM cycle)."""
+    try:
+        voter_email = _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, vote.eom_cycle_id)
+
+        # Prevent double voting
+        existing_vote = (
+            db.query(EOMVoter)
+            .filter(EOMVoter.eom_cycle_id == resolved_eom_cycle_id, EOMVoter.voter_email == voter_email)
+            .first()
+        )
+        if existing_vote:
+            raise HTTPException(status_code=400, detail="You have already voted in this EOM cycle")
+
+        nominee = (
+            db.query(EOMNominee)
+            .filter(EOMNominee.eom_cycle_id == resolved_eom_cycle_id, EOMNominee.nominee_email == vote.nominee_email)
+            .first()
+        )
+        if not nominee:
+            raise HTTPException(status_code=404, detail="Nominee not found for this EOM cycle")
+
+        nominee.votes_received = int(nominee.votes_received or 0) + 1
+
+        vote_record = EOMVoter(eom_cycle_id=resolved_eom_cycle_id, voter_email=voter_email)
+        db.add(vote_record)
+        db.commit()
+
+        return {"success": True, "message": "Vote submitted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error submitting vote: {str(e)}")
+
+
+@app.get("/api/v2/eom/winners/{cycle_id}")
+async def get_eom_winners(cycle_id: int, request: Request, db: Session = Depends(get_db)):
+    """Get EOM winners for a cycle (cycle_id may be Cycle.id or EOMCycle.id)."""
+    try:
+        _require_authenticated_email(request)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, cycle_id)
+
+        winners = db.query(EOMWinner).filter(EOMWinner.eom_cycle_id == resolved_eom_cycle_id).all()
+        return [
+            {
+                "id": w.id,
+                "eom_cycle_id": w.eom_cycle_id,
+                "winner_email": w.winner_email,
+                "category": w.category,
+                "term": w.term,
+                "votes_received": w.votes_received,
+                "announced_at": w.announced_at.isoformat() if w.announced_at else None,
+            }
+            for w in winners
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching winners: {str(e)}")
 
 
 # ============================================================================
@@ -709,22 +993,36 @@ async def check_nominee_eligibility(request: EligibilityCheckRequest, db: Sessio
 
 @app.get("/api/v2/eom/rotation-rules/eligible-nominees/{eom_cycle_id}")
 async def get_eligible_nominees(
-    eom_cycle_id: int, category: EOMCategory = Query(..., description="Category to check"), db: Session = Depends(get_db)
+    eom_cycle_id: int,
+    request: Request,
+    category: Optional[EOMCategory] = Query(None, description="Optional category to check"),
+    db: Session = Depends(get_db),
 ):
     """
     Get list of all eligible nominees for a category in an EOM cycle.
     """
     try:
+        _require_eom_access(request, db)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, eom_cycle_id)
+
+        # Frontend currently uses this endpoint as a "nominee directory" (no category filter).
+        if category is None:
+            people = db.query(Person).filter(Person.active == True).order_by(Person.full_name.asc()).all()
+            return [
+                {
+                    "email": p.email,
+                    "full_name": p.full_name,
+                    "department": p.department,
+                    "role_title": p.role_title,
+                    "segment": p.segment.value if hasattr(p.segment, "value") else p.segment,
+                }
+                for p in people
+            ]
+
         manager = EOMRotationManager(db)
-
-        eligible = manager.get_eligible_nominees(eom_cycle_id=eom_cycle_id, category=category)
-
-        return {
-            "eom_cycle_id": eom_cycle_id,
-            "category": category.value,
-            "total_eligible": len(eligible),
-            "nominees": eligible,
-        }
+        eligible = manager.get_eligible_nominees(eom_cycle_id=resolved_eom_cycle_id, category=category)
+        # Return a flat list for frontend ergonomics.
+        return eligible
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving eligible nominees: {str(e)}")
 
@@ -1672,6 +1970,30 @@ async def get_ceo_report(
 # ============================================================================
 
 
+class CycleCreateRequest(BaseModel):
+    code: str
+    name: Optional[str] = None
+    start_date: Optional[str] = None  # YYYY-MM-DD
+    end_date: Optional[str] = None  # YYYY-MM-DD
+    status: Optional[str] = "draft"  # draft, active, closed
+
+
+class CycleUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[str] = None  # YYYY-MM-DD
+    end_date: Optional[str] = None  # YYYY-MM-DD
+    status: Optional[str] = None  # draft, active, closed
+
+
+def _parse_optional_iso_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Expected YYYY-MM-DD")
+
+
 @app.get("/api/v2/cycles")
 async def get_all_cycles(db: Session = Depends(get_db)):
     """Get all cycles"""
@@ -1692,6 +2014,108 @@ async def get_all_cycles(db: Session = Depends(get_db)):
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving cycles: {str(e)}")
+
+
+@app.post("/api/v2/cycles")
+async def create_cycle(request: CycleCreateRequest, http_request: Request, db: Session = Depends(get_db)):
+    """Create a new cycle (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+
+        code = str(request.code).strip()
+        if not code:
+            raise HTTPException(status_code=422, detail="code is required")
+
+        status_value = (request.status or "draft").strip().lower()
+        if status_value not in {"draft", "active", "closed"}:
+            raise HTTPException(status_code=422, detail="status must be one of: draft, active, closed")
+
+        existing = db.query(Cycle).filter(Cycle.code == code).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Cycle code already exists")
+
+        cycle = Cycle(
+            code=code,
+            name=request.name,
+            start_date=_parse_optional_iso_date(request.start_date),
+            end_date=_parse_optional_iso_date(request.end_date),
+            status=status_value,
+        )
+        db.add(cycle)
+
+        # If activating, ensure only one active cycle.
+        if status_value == "active":
+            db.query(Cycle).filter(Cycle.status == "active").update({"status": "draft"}, synchronize_session=False)
+
+        db.commit()
+        db.refresh(cycle)
+
+        return {
+            "message": "Cycle created successfully",
+            "data": {
+                "id": cycle.id,
+                "code": cycle.code,
+                "name": cycle.name,
+                "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
+                "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
+                "status": cycle.status,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating cycle: {str(e)}")
+
+
+@app.put("/api/v2/cycles/{cycle_id}")
+async def update_cycle(
+    cycle_id: int, request: CycleUpdateRequest, http_request: Request, db: Session = Depends(get_db)
+):
+    """Update a cycle (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+
+        cycle = db.query(Cycle).filter(Cycle.id == cycle_id).first()
+        if not cycle:
+            raise HTTPException(status_code=404, detail="Cycle not found")
+
+        payload = request.model_dump(exclude_unset=True)
+        if "name" in payload:
+            cycle.name = payload["name"]
+        if "start_date" in payload:
+            cycle.start_date = _parse_optional_iso_date(payload["start_date"])
+        if "end_date" in payload:
+            cycle.end_date = _parse_optional_iso_date(payload["end_date"])
+        if "status" in payload and payload["status"] is not None:
+            status_value = str(payload["status"]).strip().lower()
+            if status_value not in {"draft", "active", "closed"}:
+                raise HTTPException(status_code=422, detail="status must be one of: draft, active, closed")
+            cycle.status = status_value
+            if status_value == "active":
+                db.query(Cycle).filter(Cycle.id != cycle_id, Cycle.status == "active").update(
+                    {"status": "draft"}, synchronize_session=False
+                )
+
+        db.commit()
+        db.refresh(cycle)
+
+        return {
+            "message": "Cycle updated successfully",
+            "data": {
+                "id": cycle.id,
+                "code": cycle.code,
+                "name": cycle.name,
+                "start_date": cycle.start_date.isoformat() if cycle.start_date else None,
+                "end_date": cycle.end_date.isoformat() if cycle.end_date else None,
+                "status": cycle.status,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating cycle: {str(e)}")
 
 
 @app.get("/api/v2/cycles/current")
@@ -1748,6 +2172,227 @@ async def get_cycle_by_id(cycle_id: int, db: Session = Depends(get_db)):
 
 
 # ============================================================================
+# People / Staff Endpoints
+# ============================================================================
+
+
+class PersonCreateRequest(BaseModel):
+    email: EmailStr
+    full_name: str
+    role_title: Optional[str] = None
+    department: Optional[str] = None
+    segment: Optional[str] = "whole_school"  # national, international, whole_school
+    hire_date: Optional[str] = None  # YYYY-MM-DD
+    active: Optional[bool] = True
+
+
+class PersonUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    role_title: Optional[str] = None
+    department: Optional[str] = None
+    segment: Optional[str] = None
+    hire_date: Optional[str] = None  # YYYY-MM-DD
+    active: Optional[bool] = None
+
+
+def _parse_staff_segment(value: Optional[str]) -> StaffSegment:
+    if not value:
+        return StaffSegment.WHOLE_SCHOOL
+    try:
+        return StaffSegment(str(value).strip().lower())
+    except ValueError:
+        allowed = ", ".join([s.value for s in StaffSegment])
+        raise HTTPException(status_code=422, detail=f"Invalid segment. Allowed: {allowed}")
+
+
+def _parse_optional_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Expected YYYY-MM-DD")
+
+
+@app.get("/api/v2/people")
+async def list_people(
+    http_request: Request,
+    active: Optional[bool] = Query(None),
+    segment: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """List people (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+        query = db.query(Person)
+        if active is not None:
+            query = query.filter(Person.active == active)
+        if segment:
+            query = query.filter(Person.segment == _parse_staff_segment(segment))
+        people = query.order_by(Person.full_name.asc()).all()
+        return [
+            {
+                "email": p.email,
+                "full_name": p.full_name,
+                "role_title": p.role_title,
+                "department": p.department,
+                "segment": p.segment.value if hasattr(p.segment, "value") else p.segment,
+                "hire_date": p.hire_date.isoformat() if p.hire_date else None,
+                "active": p.active,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            }
+            for p in people
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving people: {str(e)}")
+
+
+@app.get("/api/v2/people/{email}")
+async def get_person(email: str, http_request: Request, db: Session = Depends(get_db)):
+    """Get a person by email (self or admin)."""
+    try:
+        current_user_email = _require_authenticated_email(http_request)
+        if email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
+
+        person = db.query(Person).filter(Person.email == email).first()
+        if not person:
+            raise HTTPException(status_code=404, detail="Person not found")
+
+        return {
+            "email": person.email,
+            "full_name": person.full_name,
+            "role_title": person.role_title,
+            "department": person.department,
+            "segment": person.segment.value if hasattr(person.segment, "value") else person.segment,
+            "hire_date": person.hire_date.isoformat() if person.hire_date else None,
+            "active": person.active,
+            "created_at": person.created_at.isoformat() if person.created_at else None,
+            "updated_at": person.updated_at.isoformat() if person.updated_at else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving person: {str(e)}")
+
+
+@app.get("/api/v2/people/segment/{segment}")
+async def list_people_by_segment(segment: str, http_request: Request, db: Session = Depends(get_db)):
+    """List people by segment (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+        seg = _parse_staff_segment(segment)
+        people = db.query(Person).filter(Person.segment == seg).order_by(Person.full_name.asc()).all()
+        return [
+            {
+                "email": p.email,
+                "full_name": p.full_name,
+                "role_title": p.role_title,
+                "department": p.department,
+                "segment": p.segment.value if hasattr(p.segment, "value") else p.segment,
+                "hire_date": p.hire_date.isoformat() if p.hire_date else None,
+                "active": p.active,
+            }
+            for p in people
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving people: {str(e)}")
+
+
+@app.post("/api/v2/people")
+async def create_person(request: PersonCreateRequest, http_request: Request, db: Session = Depends(get_db)):
+    """Create a new person (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+
+        existing = db.query(Person).filter(Person.email == str(request.email)).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Person already exists")
+
+        person = Person(
+            email=str(request.email),
+            full_name=request.full_name,
+            role_title=request.role_title,
+            department=request.department,
+            segment=_parse_staff_segment(request.segment),
+            hire_date=_parse_optional_date(request.hire_date),
+            active=bool(request.active) if request.active is not None else True,
+        )
+        db.add(person)
+        db.commit()
+        db.refresh(person)
+
+        return {
+            "message": "Person created successfully",
+            "data": {
+                "email": person.email,
+                "full_name": person.full_name,
+                "role_title": person.role_title,
+                "department": person.department,
+                "segment": person.segment.value if hasattr(person.segment, "value") else person.segment,
+                "hire_date": person.hire_date.isoformat() if person.hire_date else None,
+                "active": person.active,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating person: {str(e)}")
+
+
+@app.put("/api/v2/people/{email}")
+async def update_person(email: str, request: PersonUpdateRequest, http_request: Request, db: Session = Depends(get_db)):
+    """Update an existing person (admin only)."""
+    try:
+        _require_admin_access(http_request, db)
+
+        person = db.query(Person).filter(Person.email == email).first()
+        if not person:
+            raise HTTPException(status_code=404, detail="Person not found")
+
+        payload = request.model_dump(exclude_unset=True)
+        if "full_name" in payload:
+            person.full_name = payload["full_name"]
+        if "role_title" in payload:
+            person.role_title = payload["role_title"]
+        if "department" in payload:
+            person.department = payload["department"]
+        if "segment" in payload:
+            person.segment = _parse_staff_segment(payload["segment"])
+        if "hire_date" in payload:
+            person.hire_date = _parse_optional_date(payload["hire_date"])
+        if "active" in payload:
+            person.active = bool(payload["active"])
+
+        db.commit()
+        db.refresh(person)
+
+        return {
+            "message": "Person updated successfully",
+            "data": {
+                "email": person.email,
+                "full_name": person.full_name,
+                "role_title": person.role_title,
+                "department": person.department,
+                "segment": person.segment.value if hasattr(person.segment, "value") else person.segment,
+                "hire_date": person.hire_date.isoformat() if person.hire_date else None,
+                "active": person.active,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating person: {str(e)}")
+
+
+# ============================================================================
 # Health Check
 # ============================================================================
 
@@ -1770,20 +2415,197 @@ async def health_check_simple():
     }
 
 
+@app.get("/api/v2/health/config")
+async def health_config():
+    """
+    Non-secret runtime config flags to avoid guessing in production.
+    Safe to expose publicly (booleans only).
+    """
+    from backend.email_service import EmailService
+
+    supabase_url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "").strip()
+    anon_key = (os.getenv("SUPABASE_ANON_KEY") or "").strip()
+    service_role = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY") or "").strip()
+
+    email_service = EmailService()
+    smtp_password_set = bool(email_service.smtp_password)
+
+    return {
+        "env": os.getenv("ENVIRONMENT", "development"),
+        "supabase": {
+            "url_set": bool(supabase_url),
+            "anon_key_set": bool(anon_key),
+            "service_role_key_set": bool(service_role),
+        },
+        "smtp": {
+            "smtp_server_set": bool(os.getenv("SMTP_SERVER", "").strip()),
+            "smtp_user_set": bool(os.getenv("SMTP_USER", "").strip()),
+            "smtp_password_set": smtp_password_set,
+            "email_enabled_effective": bool(email_service.enabled),
+        },
+        "password_recovery": {
+            "can_generate_link": bool(service_role),
+            "can_send_via_smtp": bool(service_role and smtp_password_set),
+        },
+    }
+
+
+# ============================================================================
+# Auth (Password Recovery)
+# ============================================================================
+
+
+class PasswordRecoveryRequest(BaseModel):
+    """Request a password recovery email without leaking whether the account exists."""
+
+    email: EmailStr
+
+
+class PasswordRecoveryResponse(BaseModel):
+    """Generic response for password recovery requests."""
+
+    message: str
+    provider: str  # smtp | supabase | none
+
+
+@app.post("/api/v2/auth/password-recovery", response_model=PasswordRecoveryResponse)
+async def password_recovery(payload: PasswordRecoveryRequest, http_request: Request):
+    """
+    Password recovery flow that prefers SMTP delivery (Resend) when configured.
+
+    Why:
+    - Supabase's built-in email delivery can be unreliable in production without custom SMTP.
+    - This endpoint uses the Supabase Admin API to generate a recovery link and sends it via SMTP (if configured).
+    - If SMTP isn't configured, it falls back to Supabase's `/auth/v1/recover` endpoint.
+
+    Security:
+    - Always returns a generic message (no email enumeration).
+    - Redirect target is derived from allowed origins (CORS allow-list) to prevent open redirects.
+    """
+
+    # Safe redirect target: always use the host we are currently serving (prevents open redirects).
+    host = http_request.headers.get("host") or ""
+    scheme = "https" if host and "localhost" not in host else "http"
+    candidate_origin = f"{scheme}://{host}" if host else "http://localhost:5173"
+    redirect_to = f"{candidate_origin.rstrip('/')}/reset-password"
+
+    # Supabase configuration
+    supabase_url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "https://ywcfqlyhesnikclesgpr.supabase.co").rstrip(
+        "/"
+    )
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+    anon_key = os.getenv("SUPABASE_ANON_KEY")
+
+    generic_message = "If an account exists for that email, you'll receive a reset link shortly."
+
+    # 1) Preferred: generate recovery link via Supabase Admin API and send via SMTP
+    if service_role_key:
+        try:
+            resp = requests.post(
+                f"{supabase_url}/auth/v1/admin/generate_link",
+                params={"redirect_to": redirect_to},
+                headers={
+                    "apikey": service_role_key,
+                    "Authorization": f"Bearer {service_role_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"type": "recovery", "email": str(payload.email)},
+                timeout=10,
+            )
+
+            if resp.ok:
+                data = resp.json() if resp.content else {}
+                hashed_token = data.get("hashed_token")
+                verification_type = data.get("verification_type") or "recovery"
+
+                if hashed_token:
+                    # Build a fully-qualified verify URL (properly encoded)
+                    verify_url = requests.Request(
+                        "GET",
+                        f"{supabase_url}/auth/v1/verify",
+                        params={"token": hashed_token, "type": verification_type, "redirect_to": redirect_to},
+                    ).prepare().url
+
+                    from backend.email_service import EmailService
+
+                    email_service = EmailService()
+                    # Only attempt SMTP if SMTP is configured (EmailService will also refuse if disabled)
+                    if email_service.smtp_user and email_service.smtp_password:
+                        subject = "Reset your password - EVALVision"
+                        html_body = f"""
+                        <html>
+                          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #0B2B3C;">
+                            <div style="max-width: 600px; margin: 0 auto; padding: 24px;">
+                              <h2 style="margin: 0 0 12px;">Reset your password</h2>
+                              <p style="margin: 0 0 16px;">
+                                Click the button below to reset your password. If you did not request this, you can safely ignore this email.
+                              </p>
+                              <p style="margin: 0 0 24px;">
+                                <a href="{verify_url}" style="background: #094773; color: #ffffff; text-decoration: none; padding: 12px 18px; border-radius: 6px; display: inline-block;">
+                                  Reset Password
+                                </a>
+                              </p>
+                              <p style="margin: 0; font-size: 12px; color: #4b5563;">
+                                If the button doesn't work, copy and paste this link into your browser:<br />
+                                <span style="word-break: break-all;">{verify_url}</span>
+                              </p>
+                            </div>
+                          </body>
+                        </html>
+                        """
+                        text_body = f"Reset your password: {verify_url}"
+                        sent = email_service.send_email(
+                            to_email=str(payload.email),
+                            subject=subject,
+                            html_body=html_body,
+                            text_body=text_body,
+                        )
+                        if sent:
+                            return {"message": generic_message, "provider": "smtp"}
+            else:
+                # Don't leak details to the client; log minimal info.
+                logger.warning("Supabase generate_link failed: status=%s", resp.status_code)
+        except Exception as e:
+            logger.error("Password recovery (SMTP) attempt failed: %s", str(e))
+
+    # 2) Fallback: Supabase built-in recovery email (requires anon key)
+    if anon_key:
+        try:
+            resp = requests.post(
+                f"{supabase_url}/auth/v1/recover",
+                headers={"apikey": anon_key, "Content-Type": "application/json"},
+                json={"email": str(payload.email), "redirect_to": redirect_to},
+                timeout=10,
+            )
+            if resp.ok:
+                return {"message": generic_message, "provider": "supabase"}
+            logger.warning("Supabase recover failed: status=%s", resp.status_code)
+        except Exception as e:
+            logger.error("Password recovery (Supabase) attempt failed: %s", str(e))
+
+    return {"message": generic_message, "provider": "none"}
+
+
 # ============================================================================
 # Objections Endpoints
 # ============================================================================
 
 
 class ObjectionSubmitRequest(BaseModel):
-    """Request model for submitting an objection"""
+    """Request model for submitting an objection (supports legacy EOM objection payload)"""
 
-    submitted_by: EmailStr
-    objection_type: str
-    related_entity_type: str
-    related_entity_id: int
-    title: str
-    description: str
+    # Legacy EOM objection payload (frontend vote flow)
+    eom_nominee_id: Optional[int] = None
+    objector_email: Optional[EmailStr] = None  # ignored; derived from auth
+    reason: Optional[str] = None
+
+    # Generic objection payload
+    submitted_by: Optional[EmailStr] = None  # ignored; derived from auth
+    objection_type: Optional[str] = None
+    related_entity_type: Optional[str] = None
+    related_entity_id: Optional[int] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ObjectionResolveRequest(BaseModel):
@@ -1795,16 +2617,34 @@ class ObjectionResolveRequest(BaseModel):
 
 
 @app.post("/api/v2/objections")
-async def submit_objection(request: ObjectionSubmitRequest, db: Session = Depends(get_db)):
+async def submit_objection(request: ObjectionSubmitRequest, http_request: Request, db: Session = Depends(get_db)):
     """Submit an objection to an EOM nomination or evaluation"""
     try:
+        current_user_email = _require_authenticated_email(http_request)
+
+        # Normalize legacy payload to generic fields
+        if request.eom_nominee_id is not None and request.reason:
+            objection_type = "eom_nomination"
+            related_entity_type = "eom_nominee"
+            related_entity_id = request.eom_nominee_id
+            title = "EOM Nomination Objection"
+            description = request.reason
+        else:
+            if not all([request.objection_type, request.related_entity_type, request.related_entity_id, request.title, request.description]):
+                raise HTTPException(status_code=400, detail="Missing required objection fields")
+            objection_type = request.objection_type
+            related_entity_type = request.related_entity_type
+            related_entity_id = request.related_entity_id
+            title = request.title
+            description = request.description
+
         objection = Objection(
-            submitted_by=request.submitted_by,
-            objection_type=request.objection_type,
-            related_entity_type=request.related_entity_type,
-            related_entity_id=request.related_entity_id,
-            title=request.title,
-            description=request.description,
+            submitted_by=current_user_email,
+            objection_type=objection_type,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+            title=title,
+            description=description,
             status="pending",
         )
         db.add(objection)
@@ -1818,12 +2658,14 @@ async def submit_objection(request: ObjectionSubmitRequest, db: Session = Depend
 
 @app.get("/api/v2/objections")
 async def get_objections(
+    http_request: Request,
     status: Optional[str] = Query(None, description="Filter by status"),
     submitted_by: Optional[str] = Query(None, description="Filter by submitter"),
     db: Session = Depends(get_db),
 ):
     """Get all objections"""
     try:
+        _require_admin_access(http_request, db)
         query = db.query(Objection)
         if status:
             query = query.filter(Objection.status == status)
@@ -1831,20 +2673,42 @@ async def get_objections(
             query = query.filter(Objection.submitted_by == submitted_by)
         objections = query.order_by(Objection.created_at.desc()).all()
 
+        # Hydrate EOM nominee + submitter names for the admin UI
+        def _nominee_name_for(o: Objection) -> Optional[str]:
+            if o.related_entity_type != "eom_nominee":
+                return None
+            nominee = db.query(EOMNominee).filter(EOMNominee.id == o.related_entity_id).first()
+            if nominee and nominee.nominee_person:
+                return nominee.nominee_person.full_name
+            if nominee:
+                person = db.query(Person).filter(Person.email == nominee.nominee_email).first()
+                return person.full_name if person else nominee.nominee_email
+            return None
+
+        def _submitter_name_for(o: Objection) -> Optional[str]:
+            person = db.query(Person).filter(Person.email == o.submitted_by).first()
+            return person.full_name if person else None
+
         return [
             {
                 "id": o.id,
+                # Friendly fields used by the current frontend
+                "nominee_name": _nominee_name_for(o),
+                "objector_name": _submitter_name_for(o),
+                "objector_email": o.submitted_by,
+                "reason": o.description,
+                "status": o.status,
+                "resolution_notes": o.resolution_notes,
+                "reviewed_by": o.resolved_by,
+                "reviewed_at": o.resolved_at.isoformat() if o.resolved_at else None,
+                "created_at": o.created_at.isoformat(),
+                # Preserve raw fields for debugging / future UI use
                 "submitted_by": o.submitted_by,
                 "objection_type": o.objection_type,
                 "related_entity_type": o.related_entity_type,
                 "related_entity_id": o.related_entity_id,
                 "title": o.title,
                 "description": o.description,
-                "status": o.status,
-                "resolution_notes": o.resolution_notes,
-                "resolved_by": o.resolved_by,
-                "resolved_at": o.resolved_at.isoformat() if o.resolved_at else None,
-                "created_at": o.created_at.isoformat(),
             }
             for o in objections
         ]
@@ -1853,16 +2717,19 @@ async def get_objections(
 
 
 @app.post("/api/v2/objections/{objection_id}/resolve")
-async def resolve_objection(objection_id: int, request: ObjectionResolveRequest, db: Session = Depends(get_db)):
+async def resolve_objection(
+    objection_id: int, request: ObjectionResolveRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """Resolve an objection"""
     try:
+        current_user_email = _require_admin_access(http_request, db)
         objection = db.query(Objection).filter(Objection.id == objection_id).first()
         if not objection:
             raise HTTPException(status_code=404, detail="Objection not found")
 
         objection.status = request.status
         objection.resolution_notes = request.resolution_notes
-        objection.resolved_by = request.reviewed_by
+        objection.resolved_by = current_user_email
         objection.resolved_at = datetime.utcnow()
 
         db.commit()
@@ -1884,7 +2751,7 @@ class AnnouncementCreateRequest(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
-    author_email: EmailStr
+    author_email: Optional[EmailStr] = None  # derived from auth in production
     priority: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
     target_audience: str = Field(default="all", pattern="^(all|ceo|pnc|department_head|staff)$")
     expires_at: Optional[datetime] = None
@@ -1902,15 +2769,17 @@ class AnnouncementUpdateRequest(BaseModel):
 
 
 @app.post("/api/v2/announcements")
-async def create_announcement(request: AnnouncementCreateRequest, db: Session = Depends(get_db)):
+async def create_announcement(request: AnnouncementCreateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Create a new announcement"""
     try:
         from backend.database import Announcement
 
+        current_user_email = _require_admin_access(http_request, db)
+
         announcement = Announcement(
             title=request.title,
             content=request.content,
-            author_email=request.author_email,
+            author_email=current_user_email,
             priority=request.priority,
             target_audience=request.target_audience,
             expires_at=request.expires_at,
@@ -1942,17 +2811,24 @@ async def create_announcement(request: AnnouncementCreateRequest, db: Session = 
 
 @app.get("/api/v2/announcements")
 async def get_announcements(
+    http_request: Request,
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     priority: Optional[str] = Query(None, description="Filter by priority"),
     target_audience: Optional[str] = Query(None, description="Filter by target audience"),
-    user_email: Optional[str] = Query(None, description="User email for audience filtering"),
     db: Session = Depends(get_db),
 ):
     """Get all announcements, filtered by active status, priority, and audience"""
     try:
         from datetime import datetime
 
-        from backend.database import Announcement, Person
+        from backend.database import Announcement
+
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(http_request)
+        rbac = RBACSystem(db)
+        current_role = rbac.get_user_role(current_user_email)
+        is_admin = rbac.is_super_admin(current_user_email) or current_role in ("ceo", "pnc")
 
         query = db.query(Announcement)
 
@@ -1968,14 +2844,15 @@ async def get_announcements(
 
         # Filter by target audience
         if target_audience:
+            # Only admins can override the audience filter
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Admin access required for audience filtering")
             query = query.filter(Announcement.target_audience == target_audience)
-        elif user_email:
-            # Auto-filter based on user role
-            user = db.query(Person).filter(Person.email == user_email).first()
-            if user:
-                # Check user role and filter accordingly
-                # For now, show 'all' and user-specific audience
-                query = query.filter((Announcement.target_audience == "all") | (Announcement.target_audience == "staff"))
+        elif not is_admin:
+            # Auto-filter based on current user's inferred role
+            query = query.filter(
+                (Announcement.target_audience == "all") | (Announcement.target_audience == current_role)
+            )
 
         # Filter out expired announcements
         query = query.filter((Announcement.expires_at.is_(None)) | (Announcement.expires_at > datetime.utcnow()))
@@ -2005,12 +2882,28 @@ async def get_announcements(
 
 
 @app.get("/api/v2/announcements/{announcement_id}")
-async def get_announcement(announcement_id: int, db: Session = Depends(get_db)):
+async def get_announcement(announcement_id: int, http_request: Request, db: Session = Depends(get_db)):
     """Get a single announcement by ID"""
     try:
-        from backend.database import Announcement
+        from datetime import datetime
 
-        announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
+        from backend.database import Announcement
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(http_request)
+        rbac = RBACSystem(db)
+        current_role = rbac.get_user_role(current_user_email)
+        is_admin = rbac.is_super_admin(current_user_email) or current_role in ("ceo", "pnc")
+
+        query = db.query(Announcement).filter(Announcement.id == announcement_id)
+        if not is_admin:
+            query = query.filter(Announcement.is_active == True)
+            query = query.filter(
+                (Announcement.target_audience == "all") | (Announcement.target_audience == current_role)
+            )
+            query = query.filter((Announcement.expires_at.is_(None)) | (Announcement.expires_at > datetime.utcnow()))
+
+        announcement = query.first()
         if not announcement:
             raise HTTPException(status_code=404, detail="Announcement not found")
 
@@ -2036,10 +2929,14 @@ async def get_announcement(announcement_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/api/v2/announcements/{announcement_id}")
-async def update_announcement(announcement_id: int, request: AnnouncementUpdateRequest, db: Session = Depends(get_db)):
+async def update_announcement(
+    announcement_id: int, request: AnnouncementUpdateRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """Update an announcement"""
     try:
         from backend.database import Announcement
+
+        _require_admin_access(http_request, db)
 
         announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
         if not announcement:
@@ -2082,10 +2979,12 @@ async def update_announcement(announcement_id: int, request: AnnouncementUpdateR
 
 
 @app.delete("/api/v2/announcements/{announcement_id}")
-async def delete_announcement(announcement_id: int, db: Session = Depends(get_db)):
+async def delete_announcement(announcement_id: int, http_request: Request, db: Session = Depends(get_db)):
     """Delete an announcement (soft delete by setting is_active=False)"""
     try:
         from backend.database import Announcement
+
+        _require_admin_access(http_request, db)
 
         announcement = db.query(Announcement).filter(Announcement.id == announcement_id).first()
         if not announcement:
@@ -2109,13 +3008,19 @@ async def delete_announcement(announcement_id: int, db: Session = Depends(get_db
 
 @app.get("/api/v2/notifications")
 async def get_notifications(
-    user_email: str = Query(...),
+    request: Request,
+    user_email: Optional[str] = Query(None, description="(Admin only) fetch notifications for a specific user"),
     read: Optional[bool] = Query(None, description="Filter by read status"),
     db: Session = Depends(get_db),
 ):
     """Get notifications for a user"""
     try:
-        query = db.query(Notification).filter(Notification.recipient_email == user_email)
+        current_user_email = _require_authenticated_email(request)
+        target_email = user_email or current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
+
+        query = db.query(Notification).filter(Notification.recipient_email == target_email)
         if read is not None:
             query = query.filter(Notification.read == read)
         notifications = query.order_by(Notification.created_at.desc()).all()
@@ -2136,17 +3041,29 @@ async def get_notifications(
             }
             for n in notifications
         ]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/v2/notifications/{notification_id}/read")
-async def mark_notification_read(notification_id: int, user_email: str = Query(...), db: Session = Depends(get_db)):
+async def mark_notification_read(
+    notification_id: int,
+    request: Request,
+    user_email: Optional[str] = Query(None, description="(Admin only) mark a notification for a specific user"),
+    db: Session = Depends(get_db),
+):
     """Mark notification as read"""
     try:
+        current_user_email = _require_authenticated_email(request)
+        target_email = user_email or current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
+
         notification = (
             db.query(Notification)
-            .filter(Notification.id == notification_id, Notification.recipient_email == user_email)
+            .filter(Notification.id == notification_id, Notification.recipient_email == target_email)
             .first()
         )
         if not notification:
@@ -2164,12 +3081,21 @@ async def mark_notification_read(notification_id: int, user_email: str = Query(.
 
 
 @app.post("/api/v2/notifications/read-all")
-async def mark_all_notifications_read(user_email: str = Query(...), db: Session = Depends(get_db)):
+async def mark_all_notifications_read(
+    request: Request,
+    user_email: Optional[str] = Query(None, description="(Admin only) mark all notifications for a specific user"),
+    db: Session = Depends(get_db),
+):
     """Mark all notifications as read for a user"""
     try:
+        current_user_email = _require_authenticated_email(request)
+        target_email = user_email or current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
+
         updated = (
             db.query(Notification)
-            .filter(Notification.recipient_email == user_email, Notification.read == False)
+            .filter(Notification.recipient_email == target_email, Notification.read == False)
             .update({"read": True, "read_at": datetime.utcnow()}, synchronize_session=False)
         )
         db.commit()
@@ -2180,12 +3106,15 @@ async def mark_all_notifications_read(user_email: str = Query(...), db: Session 
 
 
 @app.get("/api/v2/notifications/user-behavior/{user_email}")
-async def get_user_behavior_profile(user_email: str, db: Session = Depends(get_db)):
+async def get_user_behavior_profile(user_email: str, request: Request, db: Session = Depends(get_db)):
     """
     Get user behavior profile for smart reminder timing.
     Returns optimal reminder times based on historical completion patterns.
     """
     try:
+        current_user_email = _require_authenticated_email(request)
+        if user_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
         notification_system = SmartNotificationSystem(db)
         profile = notification_system.get_user_behavior_profile(user_email)
         return profile
@@ -2194,12 +3123,18 @@ async def get_user_behavior_profile(user_email: str, db: Session = Depends(get_d
 
 
 @app.post("/api/v2/notifications/smart-reminder/{cycle_id}")
-async def send_smart_reminders(cycle_id: int, user_email: Optional[str] = None, db: Session = Depends(get_db)):
+async def send_smart_reminders(
+    cycle_id: int,
+    request: Request,
+    user_email: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     """
     Send smart reminders based on user behavior profiles.
     Only sends if current time is optimal for the user.
     """
     try:
+        _require_admin_access(request, db)
         from backend.database import Assignment, Evaluation
 
         notification_system = SmartNotificationSystem(db)
@@ -2249,7 +3184,10 @@ async def send_smart_reminders(cycle_id: int, user_email: Optional[str] = None, 
 
 @app.post("/api/v2/notifications/check-overdue/{cycle_id}")
 async def check_overdue_evaluations(
-    cycle_id: int, escalation_days: int = Query(7, ge=1, le=30), db: Session = Depends(get_db)
+    cycle_id: int,
+    request: Request,
+    escalation_days: int = Query(7, ge=1, le=30),
+    db: Session = Depends(get_db),
 ):
     """
     Check for overdue evaluations and send escalation alerts.
@@ -2259,6 +3197,7 @@ async def check_overdue_evaluations(
         escalation_days: Days after which to escalate (default: 7)
     """
     try:
+        _require_admin_access(request, db)
         notification_system = SmartNotificationSystem(db)
         result = notification_system.check_overdue_evaluations(cycle_id=cycle_id, escalation_days=escalation_days)
         return result
@@ -2267,7 +3206,12 @@ async def check_overdue_evaluations(
 
 
 @app.post("/api/v2/notifications/due-soon-reminders/{cycle_id}")
-async def send_due_soon_reminders(cycle_id: int, days_before: int = Query(3, ge=1, le=14), db: Session = Depends(get_db)):
+async def send_due_soon_reminders(
+    cycle_id: int,
+    request: Request,
+    days_before: int = Query(3, ge=1, le=14),
+    db: Session = Depends(get_db),
+):
     """
     Send reminders for evaluations due soon, using smart timing based on user behavior.
 
@@ -2276,6 +3220,7 @@ async def send_due_soon_reminders(cycle_id: int, days_before: int = Query(3, ge=
         days_before: Days before deadline to send reminder (default: 3)
     """
     try:
+        _require_admin_access(request, db)
         notification_system = SmartNotificationSystem(db)
         result = notification_system.send_due_soon_reminders(cycle_id=cycle_id, days_before=days_before)
         return result
@@ -2291,7 +3236,7 @@ async def send_due_soon_reminders(cycle_id: int, days_before: int = Query(3, ge=
 class IdentityPreferenceRequest(BaseModel):
     """Request model for setting identity preference"""
 
-    user_email: EmailStr
+    user_email: Optional[EmailStr] = None  # derived from auth in production
     preference: str = Field(..., description="Identity mode: 'anonymous', 'identified', or 'conditional'")
     survey_id: Optional[int] = None
 
@@ -2299,7 +3244,7 @@ class IdentityPreferenceRequest(BaseModel):
 class IdentityRevealRequest(BaseModel):
     """Request model for identity reveal"""
 
-    user_email: EmailStr
+    user_email: Optional[EmailStr] = None  # derived from auth in production
     method: str = Field(
         ..., description="Reveal method: 'full', 'partial_role', 'partial_department', 'gradual', 'consent_based'"
     )
@@ -2311,7 +3256,7 @@ class IdentityRevealRequest(BaseModel):
 
 
 @app.post("/api/v2/survey/identity/preference")
-async def set_identity_preference(request: IdentityPreferenceRequest, db: Session = Depends(get_db)):
+async def set_identity_preference(request: IdentityPreferenceRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Set user identity preference for surveys.
 
@@ -2321,9 +3266,10 @@ async def set_identity_preference(request: IdentityPreferenceRequest, db: Sessio
     - conditional: Conditional reveal with consent-based options
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         identity_manager = SurveyIdentityManager(db)
         result = identity_manager.set_identity_preference(
-            user_id=request.user_email, preference=request.preference, survey_id=request.survey_id
+            user_id=current_user_email, preference=request.preference, survey_id=request.survey_id
         )
         return result
     except ValueError as e:
@@ -2333,7 +3279,7 @@ async def set_identity_preference(request: IdentityPreferenceRequest, db: Sessio
 
 
 @app.post("/api/v2/survey/identity/reveal")
-async def handle_identity_reveal(request: IdentityRevealRequest, db: Session = Depends(get_db)):
+async def handle_identity_reveal(request: IdentityRevealRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Handle user request to reveal identity.
 
@@ -2345,6 +3291,7 @@ async def handle_identity_reveal(request: IdentityRevealRequest, db: Session = D
     - consent_based: Consent-based reveal
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         identity_manager = SurveyIdentityManager(db)
         reveal_request = {
             "method": request.method,
@@ -2354,7 +3301,7 @@ async def handle_identity_reveal(request: IdentityRevealRequest, db: Session = D
             "revoke_anonymity": request.revoke_anonymity,
         }
         result = identity_manager.handle_identity_reveal(
-            user_id=request.user_email, reveal_request=reveal_request, survey_id=request.survey_id
+            user_id=current_user_email, reveal_request=reveal_request, survey_id=request.survey_id
         )
         return result
     except Exception as e:
@@ -2362,7 +3309,12 @@ async def handle_identity_reveal(request: IdentityRevealRequest, db: Session = D
 
 
 @app.get("/api/v2/survey/identity/status/{user_email}")
-async def get_identity_status(user_email: EmailStr, survey_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+async def get_identity_status(
+    user_email: EmailStr,
+    http_request: Request,
+    survey_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
     """
     Get current identity status for a user.
 
@@ -2374,6 +3326,9 @@ async def get_identity_status(user_email: EmailStr, survey_id: Optional[int] = Q
     - retention_policy: Data retention policy
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        if user_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
         identity_manager = SurveyIdentityManager(db)
         result = identity_manager.get_identity_status(user_id=user_email, survey_id=survey_id)
         return result
@@ -2382,15 +3337,24 @@ async def get_identity_status(user_email: EmailStr, survey_id: Optional[int] = Q
 
 
 @app.post("/api/v2/survey/identity/revoke-anonymity")
-async def revoke_anonymity(user_email: EmailStr, survey_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+async def revoke_anonymity(
+    http_request: Request,
+    user_email: Optional[EmailStr] = None,
+    survey_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
     """
     Revoke anonymity and switch to conditional/identified mode.
 
     This allows users to transition from anonymous to identified/conditional mode.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        target_email = str(user_email) if user_email else current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
         identity_manager = SurveyIdentityManager(db)
-        result = identity_manager.process_revoke_anonymity(user_id=user_email, survey_id=survey_id)
+        result = identity_manager.process_revoke_anonymity(user_id=target_email, survey_id=survey_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error revoking anonymity: {str(e)}")
@@ -2399,7 +3363,7 @@ async def revoke_anonymity(user_email: EmailStr, survey_id: Optional[int] = Quer
 class ConditionalRevealRequest(BaseModel):
     """Request model for conditional reveal configuration"""
 
-    user_email: EmailStr
+    user_email: Optional[EmailStr] = None  # derived from auth in production
     reveal_after_survey: Optional[Dict[str, Any]] = None
     reveal_to_specific_people: Optional[Dict[str, Any]] = None
     time_based_reveal: Optional[Dict[str, Any]] = None
@@ -2414,7 +3378,9 @@ class ConditionalRevealRequest(BaseModel):
 
 
 @app.post("/api/v2/survey/identity/conditional-reveal")
-async def process_conditional_reveal(request: ConditionalRevealRequest, db: Session = Depends(get_db)):
+async def process_conditional_reveal(
+    request: ConditionalRevealRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """
     Process conditional reveal preferences.
 
@@ -2425,6 +3391,7 @@ async def process_conditional_reveal(request: ConditionalRevealRequest, db: Sess
     - consent_based_reveal: Consent-based reveal with explicit consent
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         engine = ConditionalAnonymityEngine(db)
 
         user_choice = {
@@ -2440,9 +3407,7 @@ async def process_conditional_reveal(request: ConditionalRevealRequest, db: Sess
             "reminder_frequency": request.reminder_frequency,
         }
 
-        result = engine.process_conditional_reveal(
-            user_id=request.user_email, user_choice=user_choice, survey_id=request.survey_id
-        )
+        result = engine.process_conditional_reveal(user_id=current_user_email, user_choice=user_choice, survey_id=request.survey_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing conditional reveal: {str(e)}")
@@ -2450,7 +3415,10 @@ async def process_conditional_reveal(request: ConditionalRevealRequest, db: Sess
 
 @app.get("/api/v2/survey/identity/conditional-reveal/check-triggers/{user_email}")
 async def check_trigger_conditions(
-    user_email: EmailStr, survey_id: Optional[int] = Query(None), db: Session = Depends(get_db)
+    user_email: EmailStr,
+    http_request: Request,
+    survey_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
 ):
     """
     Check if any trigger conditions have been met for conditional reveals.
@@ -2461,6 +3429,9 @@ async def check_trigger_conditions(
     - status: Current status (active, pending, no_config)
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        if user_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
         engine = ConditionalAnonymityEngine(db)
         result = engine.check_trigger_conditions(user_id=user_email, survey_id=survey_id)
         return result
@@ -2471,6 +3442,7 @@ async def check_trigger_conditions(
 @app.post("/api/v2/survey/identity/conditional-reveal/execute/{user_email}")
 async def execute_conditional_reveal(
     user_email: EmailStr,
+    http_request: Request,
     trigger: str = Query(
         ..., description="Trigger type: survey_completed, cooling_period_passed, time_based, manual_request, consent_received"
     ),
@@ -2483,6 +3455,9 @@ async def execute_conditional_reveal(
     This endpoint is called when a trigger condition has been met.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        if user_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
         from backend.conditional_anonymity_engine import RevealTrigger
 
         try:
@@ -2537,13 +3512,13 @@ class SurveyResponseRequest(BaseModel):
 class ModeSwitchRequest(BaseModel):
     """Request model for switching identity modes"""
 
-    user_email: EmailStr
+    user_email: Optional[EmailStr] = None  # derived from auth in production
     new_mode: str
     reason: Optional[str] = None
 
 
 @app.post("/api/v2/hybrid-identity/initialize-session")
-async def initialize_hybrid_session(request: HybridSessionRequest, db: Session = Depends(get_db)):
+async def initialize_hybrid_session(request: HybridSessionRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Initialize a new user session with chosen identity mode.
 
@@ -2554,20 +3529,41 @@ async def initialize_hybrid_session(request: HybridSessionRequest, db: Session =
     - identified: Fully identified
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         hybrid_system = HybridIdentitySurveySystem(db)
         result = hybrid_system.initialize_user_session(
-            user_id=request.user_email, preferred_mode=request.preferred_mode, survey_id=request.survey_id
+            user_id=current_user_email, preferred_mode=request.preferred_mode, survey_id=request.survey_id
         )
+
+        # Persist the session for cross-request reliability.
+        session_token = result.get("session_token")
+        if session_token:
+            session_data = hybrid_system.sessions.get(session_token, {})
+            expires_at = datetime.utcnow() + timedelta(hours=24)
+            _store_hybrid_session(
+                db,
+                session_token=session_token,
+                user_email=current_user_email,
+                identity_mode=session_data.get("identity_mode") or result.get("mode") or request.preferred_mode,
+                survey_id=session_data.get("survey_id"),
+                permissions=session_data.get("permissions"),
+                consent_granted=session_data.get("consent_granted"),
+                expires_at=expires_at,
+            )
+            db.commit()
+
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Error initializing session: {str(e)}")
 
 
 @app.post("/api/v2/hybrid-identity/create-survey-session")
 async def create_survey_session(
-    user_email: EmailStr,
+    http_request: Request,
+    user_email: Optional[EmailStr] = None,
     survey_type: str = Query(..., description="Survey type: comprehensive, climate, feedback, etc."),
     session_token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -2577,36 +3573,67 @@ async def create_survey_session(
     Returns mode-specific questions and privacy controls.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        target_email = str(user_email) if user_email else current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
+
         hybrid_system = HybridIdentitySurveySystem(db)
 
         # Get user profile from session or create new
         if session_token:
-            user_profile = hybrid_system.sessions.get(session_token, {})
+            session_row = _get_hybrid_session(db, session_token)
+            if not session_row:
+                raise HTTPException(status_code=404, detail="Session not found")
+            if session_row.expires_at and datetime.utcnow() > session_row.expires_at:
+                raise HTTPException(status_code=404, detail="Session expired")
+            if session_row.user_email.lower() != target_email.lower():
+                _require_admin_access(http_request, db)
+
+            session_row.last_activity = datetime.utcnow()
+            db.commit()
+
+            user_profile = {
+                "user_id": target_email,
+                "identity_mode": session_row.identity_mode,
+                "anonymous_id": None,
+            }
         else:
             # Create default profile
-            user_profile = {"user_id": user_email, "identity_mode": "conditional", "anonymous_id": None}
+            user_profile = {"user_id": target_email, "identity_mode": "conditional", "anonymous_id": None}
 
         survey_session = hybrid_system.survey_engine.create_survey_session(user_profile=user_profile, survey_type=survey_type)
         return survey_session
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating survey session: {str(e)}")
 
 
 @app.post("/api/v2/hybrid-identity/submit-response")
-async def submit_survey_response(request: SurveyResponseRequest, db: Session = Depends(get_db)):
+async def submit_survey_response(request: SurveyResponseRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Submit survey response with identity mode-specific processing.
     Applies anonymization, sentiment analysis, and theme extraction.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         hybrid_system = HybridIdentitySurveySystem(db)
 
         # Get session to determine identity mode
-        session_data = hybrid_system.sessions.get(request.session_token, {})
-        if not session_data:
+        session_row = _get_hybrid_session(db, request.session_token)
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        identity_mode = HybridIdentityMode(session_data.get("identity_mode", "conditional"))
+        if session_row.expires_at and datetime.utcnow() > session_row.expires_at:
+            raise HTTPException(status_code=404, detail="Session expired")
+
+        if session_row.user_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
+
+        session_row.last_activity = datetime.utcnow()
+        db.commit()
+
+        identity_mode = HybridIdentityMode(session_row.identity_mode or "conditional")
 
         # Handle both single response and batch responses
         if request.question_id:
@@ -2637,16 +3664,18 @@ async def submit_survey_response(request: SurveyResponseRequest, db: Session = D
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Error processing response: {str(e)}")
 
 
 @app.post("/api/v2/hybrid-identity/switch-mode")
-async def switch_identity_mode(request: ModeSwitchRequest, db: Session = Depends(get_db)):
+async def switch_identity_mode(request: ModeSwitchRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Switch user's identity mode.
     Handles data migration and privacy changes.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
         hybrid_system = HybridIdentitySurveySystem(db)
 
         try:
@@ -2655,7 +3684,7 @@ async def switch_identity_mode(request: ModeSwitchRequest, db: Session = Depends
             raise HTTPException(status_code=400, detail=f"Invalid identity mode: {request.new_mode}")
 
         result = hybrid_system.identity_manager.switch_identity_mode(
-            user_id=request.user_email, new_mode=new_mode, reason=request.reason or ""
+            user_id=current_user_email, new_mode=new_mode, reason=request.reason or ""
         )
         return result
     except HTTPException:
@@ -2667,6 +3696,7 @@ async def switch_identity_mode(request: ModeSwitchRequest, db: Session = Depends
 @app.post("/api/v2/hybrid-identity/process-reveal-request")
 async def process_reveal_request(
     user_email: EmailStr,
+    http_request: Request,
     reveal_type: str = Query(..., description="Reveal type: full, partial, conditional"),
     conditions: Optional[Dict[str, Any]] = None,
     db: Session = Depends(get_db),
@@ -2676,6 +3706,9 @@ async def process_reveal_request(
     Supports full, partial, and conditional reveals.
     """
     try:
+        current_user_email = _require_authenticated_email(http_request)
+        if user_email.lower() != current_user_email.lower():
+            _require_admin_access(http_request, db)
         hybrid_system = HybridIdentitySurveySystem(db)
         result = hybrid_system.identity_manager.process_reveal_request(
             user_id=user_email, reveal_type=reveal_type, conditions=conditions or {}
@@ -2686,12 +3719,13 @@ async def process_reveal_request(
 
 
 @app.get("/api/v2/hybrid-identity/analyze-survey-data")
-async def analyze_survey_data(survey_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+async def analyze_survey_data(http_request: Request, survey_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
     """
     Comprehensive analysis across all identity modes.
     Includes bias detection, trend analysis, and predictive insights.
     """
     try:
+        _require_admin_access(http_request, db)
         hybrid_system = HybridIdentitySurveySystem(db)
         survey_data = hybrid_system.get_all_survey_data()
         identity_breakdown = hybrid_system.get_identity_breakdown()
@@ -2793,16 +3827,17 @@ async def get_survey_details(survey_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v2/surveys")
-async def create_survey(request: SurveyCreateRequest, user_email: EmailStr = Query(...), db: Session = Depends(get_db)):
+async def create_survey(request: SurveyCreateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Create a new survey"""
     try:
+        current_user_email = _require_admin_access(http_request, db)
         survey = Survey(
             title=request.title,
             description=request.description,
             survey_type=request.survey_type,
             start_date=request.start_date,
             end_date=request.end_date,
-            created_by=user_email,
+            created_by=current_user_email,
             status="draft",
         )
         db.add(survey)
@@ -2815,9 +3850,10 @@ async def create_survey(request: SurveyCreateRequest, user_email: EmailStr = Que
 
 
 @app.put("/api/v2/surveys/{survey_id}")
-async def update_survey(survey_id: int, request: SurveyUpdateRequest, db: Session = Depends(get_db)):
+async def update_survey(survey_id: int, request: SurveyUpdateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Update an existing survey"""
     try:
+        _require_admin_access(http_request, db)
         survey = db.query(Survey).filter(Survey.id == survey_id).first()
         if not survey:
             raise HTTPException(status_code=404, detail="Survey not found")
@@ -2876,23 +3912,25 @@ async def get_survey_questions(survey_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/surveys/{survey_id}/responses")
-async def get_survey_responses(survey_id: int, user_email: EmailStr = Query(...), db: Session = Depends(get_db)):
+async def get_survey_responses(
+    survey_id: int,
+    http_request: Request,
+    user_email: Optional[EmailStr] = Query(None, description="(Admin only) filter responses for a specific user"),
+    db: Session = Depends(get_db),
+):
     """
     Get survey responses (with permissions).
     Users can only see their own responses unless they're admins.
     """
     try:
+        _require_admin_access(http_request, db)
         survey = db.query(Survey).filter(Survey.id == survey_id).first()
         if not survey:
             raise HTTPException(status_code=404, detail="Survey not found")
 
-        # Check if user is admin (simplified - should check role properly)
-        person = db.query(Person).filter(Person.email == user_email).first()
-        is_admin = person and person.role_title in ["CEO", "P&C"]
-
         query = db.query(SurveyResponse).filter(SurveyResponse.survey_id == survey_id)
-        if not is_admin:
-            query = query.filter(SurveyResponse.respondent_email == user_email)
+        if user_email:
+            query = query.filter(SurveyResponse.respondent_email == str(user_email))
 
         responses = query.all()
 
@@ -2928,9 +3966,12 @@ class SurveyResponseSubmitRequest(BaseModel):
 
 
 @app.post("/api/v2/surveys/responses")
-async def submit_survey_response_direct(request: SurveyResponseSubmitRequest, db: Session = Depends(get_db)):
+async def submit_survey_response_direct(
+    request: SurveyResponseSubmitRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """Submit a survey response directly"""
     try:
+        current_user_email = _require_authenticated_email(http_request)
         # Verify survey exists
         survey = db.query(Survey).filter(Survey.id == request.survey_id).first()
         if not survey:
@@ -2945,14 +3986,17 @@ async def submit_survey_response_direct(request: SurveyResponseSubmitRequest, db
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
+        identity_mode = (request.identity_mode or "").lower()
+        respondent_email = current_user_email if identity_mode == "identified" else None
+
         # Create response
         response = SurveyResponse(
             survey_id=request.survey_id,
             question_id=request.question_id,
-            respondent_email=request.respondent_email,
+            respondent_email=respondent_email,
             anonymous_id=request.anonymous_id,
             session_id=request.session_id,
-            identity_mode=request.identity_mode,
+            identity_mode=identity_mode,
             response_text=request.response_text,
             response_value=request.response_value,
         )
@@ -2969,9 +4013,10 @@ async def submit_survey_response_direct(request: SurveyResponseSubmitRequest, db
 
 
 @app.get("/api/v2/surveys/{survey_id}/analytics")
-async def get_survey_analytics(survey_id: int, db: Session = Depends(get_db)):
+async def get_survey_analytics(survey_id: int, http_request: Request, db: Session = Depends(get_db)):
     """Get survey analytics and statistics"""
     try:
+        _require_admin_access(http_request, db)
         survey = db.query(Survey).filter(Survey.id == survey_id).first()
         if not survey:
             raise HTTPException(status_code=404, detail="Survey not found")
@@ -3005,10 +4050,23 @@ async def get_survey_analytics(survey_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/notifications/unread-count")
-async def get_unread_notification_count(user_email: EmailStr = Query(...), db: Session = Depends(get_db)):
+async def get_unread_notification_count(
+    request: Request,
+    user_email: Optional[EmailStr] = Query(None, description="(Admin only) fetch count for a specific user"),
+    db: Session = Depends(get_db),
+):
     """Get unread notification count for user"""
     try:
-        count = db.query(Notification).filter(Notification.recipient_email == user_email, Notification.read == False).count()
+        current_user_email = _require_authenticated_email(request)
+        target_email = str(user_email) if user_email else current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
+
+        count = (
+            db.query(Notification)
+            .filter(Notification.recipient_email == target_email, Notification.read == False)
+            .count()
+        )
         return {"unread_count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching unread count: {str(e)}")
@@ -3016,13 +4074,21 @@ async def get_unread_notification_count(user_email: EmailStr = Query(...), db: S
 
 @app.post("/api/v2/notifications/mark-read")
 async def mark_notifications_read(
-    notification_ids: List[int], user_email: EmailStr = Query(...), db: Session = Depends(get_db)
+    notification_ids: List[int],
+    request: Request,
+    user_email: Optional[EmailStr] = Query(None, description="(Admin only) mark notifications for a specific user"),
+    db: Session = Depends(get_db),
 ):
     """Mark multiple notifications as read"""
     try:
+        current_user_email = _require_authenticated_email(request)
+        target_email = str(user_email) if user_email else current_user_email
+        if target_email.lower() != current_user_email.lower():
+            _require_admin_access(request, db)
+
         updated = (
             db.query(Notification)
-            .filter(Notification.id.in_(notification_ids), Notification.recipient_email == user_email)
+            .filter(Notification.id.in_(notification_ids), Notification.recipient_email == target_email)
             .update({"read": True, "read_at": datetime.utcnow()}, synchronize_session=False)
         )
         db.commit()
@@ -3199,23 +4265,47 @@ async def get_survey_section(
 
 
 @app.get("/api/v2/admin/dashboard")
-async def get_admin_dashboard(admin_id: str = Query(...), db: Session = Depends(get_db)):
+async def get_admin_dashboard(
+    request: Request,
+    admin_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     """
     Get comprehensive admin dashboard data.
     Includes overview cards, real-time metrics, analytics, and action items.
     """
     try:
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(request)
+        rbac = RBACSystem(db)
+        role = rbac.get_user_role(current_user_email)
+        if not (rbac.is_super_admin(current_user_email) or role in ("ceo", "pnc")):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # Backwards compatibility: if admin_id is provided, restrict non-super-admin users to themselves
+        if admin_id and admin_id.lower() != current_user_email.lower() and not rbac.is_super_admin(current_user_email):
+            raise HTTPException(status_code=403, detail="You can only view your own admin dashboard")
+
         dashboard = EternitySchoolAdminDashboard(db)
-        dashboard_data = dashboard.get_main_dashboard(admin_id)
+        dashboard_data = dashboard.get_main_dashboard(current_user_email)
         return dashboard_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting admin dashboard: {str(e)}")
 
 
 @app.get("/api/v2/admin/dashboard/overview-cards")
-async def get_overview_cards(db: Session = Depends(get_db)):
+async def get_overview_cards(request: Request, db: Session = Depends(get_db)):
     """Get overview metric cards for dashboard"""
     try:
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(request)
+        rbac = RBACSystem(db)
+        role = rbac.get_user_role(current_user_email)
+        if not (rbac.is_super_admin(current_user_email) or role in ("ceo", "pnc")):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
         dashboard = EternitySchoolAdminDashboard(db)
         cards = dashboard.get_overview_cards()
         return cards
@@ -3224,9 +4314,17 @@ async def get_overview_cards(db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/admin/dashboard/real-time-metrics")
-async def get_real_time_metrics(db: Session = Depends(get_db)):
+async def get_real_time_metrics(request: Request, db: Session = Depends(get_db)):
     """Get real-time system metrics"""
     try:
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(request)
+        rbac = RBACSystem(db)
+        role = rbac.get_user_role(current_user_email)
+        if not (rbac.is_super_admin(current_user_email) or role in ("ceo", "pnc")):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
         dashboard = EternitySchoolAdminDashboard(db)
         metrics = dashboard.get_real_time_metrics()
         return metrics
@@ -3235,14 +4333,189 @@ async def get_real_time_metrics(db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/admin/dashboard/identity-analytics")
-async def get_identity_analytics(db: Session = Depends(get_db)):
+async def get_identity_analytics(request: Request, db: Session = Depends(get_db)):
     """Get detailed identity mode analytics"""
     try:
+        from backend.rbac_system import RBACSystem
+
+        current_user_email = _require_authenticated_email(request)
+        rbac = RBACSystem(db)
+        role = rbac.get_user_role(current_user_email)
+        if not (rbac.is_super_admin(current_user_email) or role in ("ceo", "pnc")):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
         dashboard = EternitySchoolAdminDashboard(db)
         analytics = dashboard.get_identity_mode_analytics()
         return analytics
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting identity analytics: {str(e)}")
+
+
+# ============================================================================
+# Admin Settings Endpoints (CEO / Super Admin)
+# ============================================================================
+
+
+class SystemSettingsPayload(BaseModel):
+    email_notifications: Optional[bool] = None
+    auto_activate_cycles: Optional[bool] = None
+    require_approval: Optional[bool] = None
+    default_rotation_period: Optional[str] = None  # term, quarter, month, year
+    max_nominations_per_person: Optional[int] = None
+    evaluation_deadline_days: Optional[int] = None
+
+    @field_validator("default_rotation_period")
+    @classmethod
+    def _validate_rotation_period(cls, v: Optional[str]):
+        if v is None:
+            return v
+        allowed = {"term", "quarter", "month", "year"}
+        value = str(v).strip().lower()
+        if value not in allowed:
+            raise ValueError(f"default_rotation_period must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+    @field_validator("max_nominations_per_person")
+    @classmethod
+    def _validate_max_nominations(cls, v: Optional[int]):
+        if v is None:
+            return v
+        if v < 1 or v > 50:
+            raise ValueError("max_nominations_per_person must be between 1 and 50")
+        return v
+
+    @field_validator("evaluation_deadline_days")
+    @classmethod
+    def _validate_deadline_days(cls, v: Optional[int]):
+        if v is None:
+            return v
+        if v < 1 or v > 365:
+            raise ValueError("evaluation_deadline_days must be between 1 and 365")
+        return v
+
+
+def _require_super_admin(request: Request, db: Session) -> str:
+    from backend.rbac_system import RBACSystem
+
+    current_user_email = _require_authenticated_email(request)
+    rbac = RBACSystem(db)
+    if not rbac.is_super_admin(current_user_email):
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return current_user_email
+
+
+@app.get("/api/v2/admin/settings")
+async def get_system_settings(request: Request, db: Session = Depends(get_db)):
+    """Get global system settings (CEO / super admin only)."""
+    try:
+        _require_super_admin(request, db)
+
+        settings = db.query(SystemSetting).filter(SystemSetting.id == 1).first()
+        if not settings:
+            raise HTTPException(status_code=404, detail="Settings not found")
+
+        return {
+            "email_notifications": settings.email_notifications,
+            "auto_activate_cycles": settings.auto_activate_cycles,
+            "require_approval": settings.require_approval,
+            "default_rotation_period": settings.default_rotation_period,
+            "max_nominations_per_person": settings.max_nominations_per_person,
+            "evaluation_deadline_days": settings.evaluation_deadline_days,
+            "updated_by": settings.updated_by,
+            "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting settings: {str(e)}")
+
+
+@app.put("/api/v2/admin/settings")
+async def update_system_settings(payload: SystemSettingsPayload, request: Request, db: Session = Depends(get_db)):
+    """Update global system settings (CEO / super admin only)."""
+    try:
+        current_user_email = _require_super_admin(request, db)
+
+        settings = db.query(SystemSetting).filter(SystemSetting.id == 1).first()
+        if not settings:
+            raise HTTPException(status_code=404, detail="Settings not found")
+
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            if value is not None:
+                setattr(settings, key, value)
+
+        settings.updated_by = current_user_email
+        db.commit()
+        db.refresh(settings)
+
+        return {
+            "email_notifications": settings.email_notifications,
+            "auto_activate_cycles": settings.auto_activate_cycles,
+            "require_approval": settings.require_approval,
+            "default_rotation_period": settings.default_rotation_period,
+            "max_nominations_per_person": settings.max_nominations_per_person,
+            "evaluation_deadline_days": settings.evaluation_deadline_days,
+            "updated_by": settings.updated_by,
+            "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating settings: {str(e)}")
+
+
+@app.post("/api/v2/admin/settings")
+async def create_system_settings(payload: SystemSettingsPayload, request: Request, db: Session = Depends(get_db)):
+    """Create global system settings if missing (CEO / super admin only)."""
+    try:
+        current_user_email = _require_super_admin(request, db)
+
+        existing = db.query(SystemSetting).filter(SystemSetting.id == 1).first()
+        if existing:
+            # Idempotent: treat as update
+            for key, value in payload.model_dump(exclude_unset=True).items():
+                if value is not None:
+                    setattr(existing, key, value)
+            existing.updated_by = current_user_email
+            db.commit()
+            db.refresh(existing)
+            return {
+                "email_notifications": existing.email_notifications,
+                "auto_activate_cycles": existing.auto_activate_cycles,
+                "require_approval": existing.require_approval,
+                "default_rotation_period": existing.default_rotation_period,
+                "max_nominations_per_person": existing.max_nominations_per_person,
+                "evaluation_deadline_days": existing.evaluation_deadline_days,
+                "updated_by": existing.updated_by,
+                "updated_at": existing.updated_at.isoformat() if existing.updated_at else None,
+            }
+
+        settings = SystemSetting(id=1)
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            if value is not None:
+                setattr(settings, key, value)
+        settings.updated_by = current_user_email
+
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+
+        return {
+            "email_notifications": settings.email_notifications,
+            "auto_activate_cycles": settings.auto_activate_cycles,
+            "require_approval": settings.require_approval,
+            "default_rotation_period": settings.default_rotation_period,
+            "max_nominations_per_person": settings.max_nominations_per_person,
+            "evaluation_deadline_days": settings.evaluation_deadline_days,
+            "updated_by": settings.updated_by,
+            "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error saving settings: {str(e)}")
 
 
 # ============================================================================
@@ -3261,12 +4534,13 @@ class HRIntegrationConfig(BaseModel):
 
 
 @app.post("/api/v2/integration/hr/setup")
-async def setup_hr_integration(config: HRIntegrationConfig, db: Session = Depends(get_db)):
+async def setup_hr_integration(config: HRIntegrationConfig, http_request: Request, db: Session = Depends(get_db)):
     """
     Set up integration with HR system.
     Configures two-way sync, evaluation bridge, and security protocols.
     """
     try:
+        _require_super_admin(http_request, db)
         integration_hub = EternitySchoolIntegrationHub(db)
         hr_config = {
             "hr_system_url": config.hr_system_url,
@@ -3282,12 +4556,13 @@ async def setup_hr_integration(config: HRIntegrationConfig, db: Session = Depend
 
 
 @app.get("/api/v2/integration/evaluation-bridge")
-async def get_evaluation_bridge(db: Session = Depends(get_db)):
+async def get_evaluation_bridge(http_request: Request, db: Session = Depends(get_db)):
     """
     Get evaluation data bridge configuration.
     Shows how survey feedback integrates with evaluation system.
     """
     try:
+        _require_admin_access(http_request, db)
         integration_hub = EternitySchoolIntegrationHub(db)
         bridge = integration_hub.create_evaluation_data_bridge()
         return bridge
@@ -3296,12 +4571,13 @@ async def get_evaluation_bridge(db: Session = Depends(get_db)):
 
 
 @app.post("/api/v2/integration/sync/staff")
-async def sync_staff_data(staff_data: List[Dict[str, Any]], db: Session = Depends(get_db)):
+async def sync_staff_data(staff_data: List[Dict[str, Any]], http_request: Request, db: Session = Depends(get_db)):
     """
     Sync staff data from HR system.
     Bidirectional sync of staff information.
     """
     try:
+        _require_super_admin(http_request, db)
         integration_hub = EternitySchoolIntegrationHub(db)
         result = integration_hub.sync_staff_data(staff_data)
         return result
@@ -3310,12 +4586,13 @@ async def sync_staff_data(staff_data: List[Dict[str, Any]], db: Session = Depend
 
 
 @app.post("/api/v2/integration/sync/evaluation")
-async def sync_evaluation_data(evaluation_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def sync_evaluation_data(evaluation_data: Dict[str, Any], http_request: Request, db: Session = Depends(get_db)):
     """
     Sync evaluation data between systems.
     Handles survey feedback to evaluation integration.
     """
     try:
+        _require_super_admin(http_request, db)
         integration_hub = EternitySchoolIntegrationHub(db)
         result = integration_hub.sync_evaluation_data(evaluation_data)
         return result
@@ -3338,12 +4615,13 @@ class SchoolConfigRequest(BaseModel):
 
 
 @app.post("/api/v2/system/setup")
-async def setup_complete_system(config: SchoolConfigRequest, db: Session = Depends(get_db)):
+async def setup_complete_system(config: SchoolConfigRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Set up the complete integrated system.
     Configures all components: templates, identity, dashboard, integrations.
     """
     try:
+        _require_super_admin(http_request, db)
         system_setup = EternitySchoolSystemSetup(db)
         school_config = {
             "hr_sync_enabled": config.hr_sync_enabled,
@@ -3358,9 +4636,10 @@ async def setup_complete_system(config: SchoolConfigRequest, db: Session = Depen
 
 
 @app.get("/api/v2/system/go-live-checklist")
-async def get_go_live_checklist(db: Session = Depends(get_db)):
+async def get_go_live_checklist(http_request: Request, db: Session = Depends(get_db)):
     """Get go-live checklist for system deployment"""
     try:
+        _require_admin_access(http_request, db)
         system_setup = EternitySchoolSystemSetup(db)
         checklist = system_setup.generate_go_live_checklist()
         return checklist
@@ -3375,6 +4654,7 @@ async def get_go_live_checklist(db: Session = Depends(get_db)):
 
 @app.get("/api/v2/audit-logs")
 async def get_audit_logs(
+    http_request: Request,
     action_type: Optional[str] = None,
     entity_type: Optional[str] = None,
     user_email: Optional[str] = None,
@@ -3385,12 +4665,51 @@ async def get_audit_logs(
 ):
     """Get audit logs with filters"""
     try:
-        from backend.audit_logger import AuditLogger
+        from backend.rbac_system import RBACSystem
 
-        audit_logger = AuditLogger(db)
-        logs = audit_logger.get_audit_logs(
-            entity_type=entity_type, entity_id=None, user_email=user_email, action_type=action_type, limit=limit
-        )
+        current_user_email = _require_authenticated_email(http_request)
+        rbac = RBACSystem(db)
+        current_role = rbac.get_user_role(current_user_email)
+        is_admin = rbac.is_super_admin(current_user_email) or current_role in ("ceo", "pnc")
+
+        # Non-admins can only view their own logs.
+        if not is_admin:
+            user_email = current_user_email
+
+        query = db.query(AuditLog)
+
+        if entity_type:
+            query = query.filter(AuditLog.entity_type == entity_type)
+
+        if user_email:
+            query = query.filter(AuditLog.user_email == user_email)
+
+        if action_type:
+            try:
+                query = query.filter(AuditLog.action_type == DBActionType(action_type.lower()))
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid action_type")
+
+        if date_from:
+            try:
+                start_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+                query = query.filter(AuditLog.created_at >= start_dt)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid date_from. Use ISO format.")
+
+        if date_to:
+            try:
+                # If only a date is provided (no time), treat it as inclusive end-of-day.
+                if "T" in date_to:
+                    end_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+                    query = query.filter(AuditLog.created_at <= end_dt)
+                else:
+                    end_date = date.fromisoformat(date_to)
+                    query = query.filter(AuditLog.created_at < (datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)))
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid date_to. Use ISO format.")
+
+        logs = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
         return [
             {
                 "id": log.id,
@@ -3431,16 +4750,17 @@ class RevokePermissionRequest(BaseModel):
 @app.post("/api/v2/admin/permissions/grant")
 async def grant_permission(
     request: GrantPermissionRequest,
-    current_user_email: str = Query(..., description="Email of user granting permission"),
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Grant a permission to a user.
-    Only super admin (ahelmy@eternityschoolegypt.com) or users with GRANT_PERMISSIONS can use this.
+    Only super admin (bootstrap CEO) or users with GRANT_PERMISSIONS can use this.
     """
     try:
         from backend.rbac_system import PermissionType, RBACSystem
 
+        current_user_email = _require_authenticated_email(http_request)
         rbac = RBACSystem(db)
 
         # Parse permission type
@@ -3490,16 +4810,17 @@ async def grant_permission(
 @app.post("/api/v2/admin/permissions/revoke")
 async def revoke_permission(
     request: RevokePermissionRequest,
-    current_user_email: str = Query(..., description="Email of user revoking permission"),
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Revoke a permission from a user.
-    Only super admin (ahelmy@eternityschoolegypt.com) or users with REVOKE_PERMISSIONS can use this.
+    Only super admin (bootstrap CEO) or users with REVOKE_PERMISSIONS can use this.
     """
     try:
         from backend.rbac_system import PermissionType, RBACSystem
 
+        current_user_email = _require_authenticated_email(http_request)
         rbac = RBACSystem(db)
 
         # Parse permission type
@@ -3528,7 +4849,7 @@ async def revoke_permission(
 @app.get("/api/v2/admin/permissions/{user_email}")
 async def get_user_permissions(
     user_email: str,
-    current_user_email: str = Query(..., description="Email of requesting user"),
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """
@@ -3538,6 +4859,7 @@ async def get_user_permissions(
     try:
         from backend.rbac_system import RBACSystem
 
+        current_user_email = _require_authenticated_email(http_request)
         rbac = RBACSystem(db)
 
         # Check if user can view permissions
@@ -3581,12 +4903,15 @@ class UpdateAssignmentsRequest(BaseModel):
 
 
 @app.post("/api/v2/staff/{email}/assign-evaluators")
-async def create_evaluator_assignments(email: str, request: CreateAssignmentsRequest, db: Session = Depends(get_db)):
+async def create_evaluator_assignments(
+    email: str, request: CreateAssignmentsRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """
     Create evaluator assignments for a staff member.
     Automatically assigns all required evaluators based on staff type (academic/admin).
     """
     try:
+        _require_admin_access(http_request, db)
         from backend.evaluator_assignment_manager import EvaluatorAssignmentManager
 
         manager = EvaluatorAssignmentManager(db)
@@ -3618,12 +4943,15 @@ async def create_evaluator_assignments(email: str, request: CreateAssignmentsReq
 
 
 @app.put("/api/v2/staff/{email}/evaluators")
-async def update_evaluator_assignments(email: str, request: UpdateAssignmentsRequest, db: Session = Depends(get_db)):
+async def update_evaluator_assignments(
+    email: str, request: UpdateAssignmentsRequest, http_request: Request, db: Session = Depends(get_db)
+):
     """
     Update evaluator assignments for a staff member.
     Used when roles change or evaluators need manual adjustment.
     """
     try:
+        _require_admin_access(http_request, db)
         from backend.evaluator_assignment_manager import EvaluatorAssignmentManager
 
         manager = EvaluatorAssignmentManager(db)
@@ -3655,12 +4983,15 @@ async def update_evaluator_assignments(email: str, request: UpdateAssignmentsReq
 
 
 @app.get("/api/v2/staff/{email}/evaluators")
-async def get_staff_evaluators(email: str, cycle_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+async def get_staff_evaluators(
+    email: str, http_request: Request, cycle_id: Optional[int] = Query(None), db: Session = Depends(get_db)
+):
     """
     Get all evaluator assignments for a staff member.
     Shows who evaluates this person.
     """
     try:
+        _require_admin_access(http_request, db)
         from backend.evaluator_assignment_manager import EvaluatorAssignmentManager
 
         manager = EvaluatorAssignmentManager(db)
@@ -3690,12 +5021,13 @@ async def get_staff_evaluators(email: str, cycle_id: Optional[int] = Query(None)
 
 
 @app.get("/api/v2/evaluation-matrix/{cycle_id}")
-async def get_evaluation_matrix(cycle_id: int, db: Session = Depends(get_db)):
+async def get_evaluation_matrix(cycle_id: int, http_request: Request, db: Session = Depends(get_db)):
     """
     Get complete evaluation matrix showing who evaluates whom.
     Shows all evaluation relationships in the system.
     """
     try:
+        _require_admin_access(http_request, db)
         from backend.evaluator_assignment_manager import EvaluatorAssignmentManager
 
         manager = EvaluatorAssignmentManager(db)
@@ -3708,12 +5040,15 @@ async def get_evaluation_matrix(cycle_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v2/staff/{email}/evaluation-status")
-async def get_staff_evaluation_status(email: str, cycle_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+async def get_staff_evaluation_status(
+    email: str, http_request: Request, cycle_id: Optional[int] = Query(None), db: Session = Depends(get_db)
+):
     """
     Get evaluation status for a staff member.
     Shows who they evaluate and who evaluates them.
     """
     try:
+        _require_admin_access(http_request, db)
         from backend.evaluator_assignment_manager import EvaluatorAssignmentManager
 
         manager = EvaluatorAssignmentManager(db)
@@ -3779,9 +5114,10 @@ async def get_staff_evaluation_status(email: str, cycle_id: Optional[int] = Quer
 
 
 @app.post("/api/v2/import/staff")
-async def import_staff(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_staff(http_request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Import staff from Excel file"""
     try:
+        _require_admin_access(http_request, db)
         import os
         import tempfile
 
@@ -3803,6 +5139,7 @@ async def import_staff(file: UploadFile = File(...), db: Session = Depends(get_d
 
 @app.post("/api/v2/import/eom-voters")
 async def import_eom_voters(
+    http_request: Request,
     file: UploadFile = File(...),
     cycle_id: int = Query(...),
     month: int = Query(...),
@@ -3811,6 +5148,7 @@ async def import_eom_voters(
 ):
     """Import EOM voters from Excel file"""
     try:
+        _require_admin_access(http_request, db)
         import os
         import tempfile
 
@@ -3830,9 +5168,10 @@ async def import_eom_voters(
 
 
 @app.post("/api/v2/import/eom-candidates")
-async def import_eom_candidates(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_eom_candidates(http_request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Import EOM candidates from Excel file"""
     try:
+        _require_admin_access(http_request, db)
         import os
         import tempfile
 
@@ -3852,9 +5191,12 @@ async def import_eom_candidates(file: UploadFile = File(...), db: Session = Depe
 
 
 @app.post("/api/v2/import/weight-matrix")
-async def import_weight_matrix(file: UploadFile = File(...), cycle_id: int = Query(...), db: Session = Depends(get_db)):
+async def import_weight_matrix(
+    http_request: Request, file: UploadFile = File(...), cycle_id: int = Query(...), db: Session = Depends(get_db)
+):
     """Import weight matrix from Excel file"""
     try:
+        _require_admin_access(http_request, db)
         import os
         import tempfile
 
@@ -3965,25 +5307,29 @@ async def get_diversity_tracking(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class EOMFeedbackSubmitRequest(BaseModel):
+    eom_cycle_id: int
+    feedback_type: str
+    feedback_text: str
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    person_email: Optional[str] = None  # ignored; derived from auth in production
+
+
 @app.post("/api/v2/eom/feedback")
-async def submit_eom_feedback(
-    eom_cycle_id: int,
-    feedback_type: str,
-    person_email: str,
-    feedback_text: str,
-    rating: Optional[int] = Query(None, ge=1, le=5),
-    db: Session = Depends(get_db),
-):
+async def submit_eom_feedback(request: EOMFeedbackSubmitRequest, http_request: Request, db: Session = Depends(get_db)):
     """Submit EOM feedback"""
     try:
         from backend.database import EOMFeedback
 
+        current_user_email = _require_authenticated_email(http_request)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, request.eom_cycle_id)
+
         feedback = EOMFeedback(
-            eom_cycle_id=eom_cycle_id,
-            feedback_type=feedback_type,
-            person_email=person_email,
-            feedback_text=feedback_text,
-            rating=rating,
+            eom_cycle_id=resolved_eom_cycle_id,
+            feedback_type=request.feedback_type,
+            person_email=current_user_email,
+            feedback_text=request.feedback_text,
+            rating=request.rating,
         )
 
         db.add(feedback)
@@ -3991,18 +5337,22 @@ async def submit_eom_feedback(
         db.refresh(feedback)
 
         return {"success": True, "feedback_id": feedback.id, "message": "Feedback submitted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/v2/eom/cycles/{cycle_id}/window-status")
-async def get_nomination_window_status(cycle_id: int, db: Session = Depends(get_db)):
+async def get_nomination_window_status(cycle_id: int, request: Request, db: Session = Depends(get_db)):
     """Get nomination window status for an EOM cycle"""
     try:
         from backend.eom_validation import EOMNominationValidator
 
-        eom_cycle = db.query(EOMCycle).filter(EOMCycle.id == cycle_id).first()
+        _require_authenticated_email(request)
+        resolved_eom_cycle_id = _resolve_eom_cycle_id(db, cycle_id)
+        eom_cycle = db.query(EOMCycle).filter(EOMCycle.id == resolved_eom_cycle_id).first()
         if not eom_cycle:
             raise HTTPException(status_code=404, detail="EOM cycle not found")
 

@@ -1,4 +1,4 @@
-# Production Deployment - Quick Start
+# Production Deployment - Quick Start (ENVIRONMENT=production, REQUIRE_SUPABASE_AUTH=true, SUPABASE_JWT_SECRET=...)
 
 ## 🚀 All Production Features Implemented
 
@@ -34,6 +34,34 @@ cp backend/.env.example backend/.env
 ```bash
 cp frontend/.env.example frontend/.env
 # Edit frontend/.env with your production values
+```
+
+### 2.1 Bootstrap CEO (First Super Admin) — REQUIRED
+
+The **first super admin is the CEO**, derived from the database:
+- `people.role_title` must contain **"CEO"** (case-insensitive)
+- the **first active** matching row (by `created_at`) becomes the bootstrap super admin
+
+Ensure the CEO exists in `people` *before* first production login.
+
+**Option A (recommended):** run the bootstrap script (idempotent)
+```bash
+# From the repo root
+python -m backend.bootstrap_ceo --email "ceo@yourdomain.com" --full-name "CEO Name"
+# If a different CEO already exists and you need to override:
+python -m backend.bootstrap_ceo --email "ceo@yourdomain.com" --full-name "CEO Name" --force
+```
+
+**Option B:** run SQL in Supabase SQL Editor (Dashboard → SQL Editor)
+```sql
+insert into public.people (email, full_name, role_title, segment, active)
+values ('ceo@yourdomain.com', 'CEO Name', 'CEO', 'whole_school', true)
+on conflict (email) do update
+set full_name = excluded.full_name,
+    role_title = excluded.role_title,
+    segment = excluded.segment,
+    active = true,
+    updated_at = now();
 ```
 
 ### 3. Set Up Redis (Optional, for distributed rate limiting)
@@ -91,6 +119,9 @@ npm run build
 - `ENVIRONMENT=production`
 - `ALLOWED_ORIGINS=https://yourdomain.com`
 - `DATABASE_URL=postgresql://...`
+- `REQUIRE_SUPABASE_AUTH=true`
+- `SUPABASE_JWT_SECRET=...` (from Supabase Dashboard → Project Settings → API → JWT Secret)
+- `SUPABASE_JWT_AUD=authenticated` (default)
 - `USE_REDIS_RATE_LIMIT=true` (if using Redis)
 - `REDIS_URL=redis://...` (if using Redis)
 - `LOG_LEVEL=INFO`

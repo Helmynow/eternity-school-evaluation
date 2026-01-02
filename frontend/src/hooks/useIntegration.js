@@ -30,15 +30,15 @@ export const useIntegration = () => {
   })
 
   // Sync staff
-  const syncStaff = useMutation(async () => {
-    const response = await apiClient.integration.syncStaff()
+  const syncStaff = useMutation(async (staffData = []) => {
+    const response = await apiClient.integration.syncStaff(staffData)
     toast.success('Staff sync completed')
     return response.data
   })
 
   // Sync evaluation
-  const syncEvaluation = useMutation(async () => {
-    const response = await apiClient.integration.syncEvaluation()
+  const syncEvaluation = useMutation(async (evaluationData = {}) => {
+    const response = await apiClient.integration.syncEvaluation(evaluationData)
     toast.success('Evaluation sync completed')
     return response.data
   })

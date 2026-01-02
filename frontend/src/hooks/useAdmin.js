@@ -14,7 +14,7 @@ export const useAdmin = (adminId = null) => {
   const fetchDashboard = useCallback(async (id) => {
     setLoading(true)
     try {
-      const response = await apiClient.admin.getDashboard(id)
+      const response = await apiClient.admin.getDashboard()
       setDashboard(response.data)
       return response.data
     } catch (error) {

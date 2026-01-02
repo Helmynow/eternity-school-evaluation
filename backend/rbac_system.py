@@ -4,10 +4,11 @@ Manages user permissions, roles, and access control for the Eternity School Eval
 """
 
 import enum
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text, func, or_
 from sqlalchemy.orm import Session, relationship
 
 from backend.audit_logger import AuditLogger
@@ -78,9 +79,6 @@ class UserPermission(Base):
 class RBACSystem:
     """Role-Based Access Control system"""
 
-    # Super admin email
-    SUPER_ADMIN_EMAIL = "ahelmy@eternityschoolegypt.com"
-
     # Role hierarchy (higher number = more permissions)
     ROLE_HIERARCHY = {
         "super_admin": 100,
@@ -127,9 +125,35 @@ class RBACSystem:
         self.db = db_session
         self.audit_logger = AuditLogger(db_session)
 
+    def _get_bootstrap_super_admin_email(self) -> Optional[str]:
+        """
+        Determine the bootstrap super admin (CEO).
+
+        Rule: the first active person whose role title clearly indicates CEO becomes the first super admin.
+        This avoids hardcoding emails and allows safe bootstrap after importing staff.
+        """
+        role_title = func.lower(func.coalesce(Person.role_title, ""))
+        ceo = (
+            self.db.query(Person.email)
+            .filter(Person.active.is_(True))
+            .filter(or_(role_title.like("%ceo%"), role_title.like("%chief executive%")))
+            .order_by(Person.created_at.asc().nullslast(), Person.email.asc())
+            .first()
+        )
+        return ceo[0] if ceo else None
+
     def is_super_admin(self, user_email: str) -> bool:
         """Check if user is super admin"""
-        return user_email.lower() == self.SUPER_ADMIN_EMAIL.lower()
+        if not user_email:
+            return False
+
+        # Break-glass override for production operations (optional)
+        override_email = (os.getenv("SUPER_ADMIN_EMAIL") or "").strip()
+        if override_email and user_email.lower() == override_email.lower():
+            return True
+
+        bootstrap_email = self._get_bootstrap_super_admin_email()
+        return bool(bootstrap_email and user_email.lower() == bootstrap_email.lower())
 
     def get_user_role(self, user_email: str) -> Optional[str]:
         """Get user's role from Person table or Supabase metadata"""

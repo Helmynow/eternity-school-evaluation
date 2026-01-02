@@ -23,14 +23,19 @@ class EmailService:
         # Never hardcode secrets. If SMTP_PASSWORD is not set, sending will be disabled/fail safely.
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
         self.from_email = os.getenv("FROM_EMAIL", "noreply@eternityschoolegypt.com")
-        # Default to disabled unless explicitly enabled via env var.
-        self.enabled = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
+        # Enable email sending if explicitly enabled OR if SMTP is configured.
+        # This avoids "configured SMTP but forgot EMAIL_ENABLED" footguns.
+        enabled_env = os.getenv("EMAIL_ENABLED")
+        if enabled_env is None:
+            self.enabled = bool(self.smtp_password)
+        else:
+            self.enabled = enabled_env.lower() == "true"
 
     def send_email(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
         """Send an email"""
         if not self.enabled:
             print(f"[EMAIL DISABLED] Would send to {to_email}: {subject}")
-            return True
+            return False
 
         if not self.smtp_user or not self.smtp_password:
             print(f"[EMAIL NOT CONFIGURED] Cannot send email to {to_email}")

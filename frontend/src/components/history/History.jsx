@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
+import { apiClient } from '../../lib/api'
 import toast from 'react-hot-toast'
 
 const History = () => {
@@ -20,23 +21,20 @@ const History = () => {
 
   const fetchAuditLogs = async () => {
     try {
-      const params = new URLSearchParams()
-      if (filters.action_type) params.append('action_type', filters.action_type)
-      if (filters.entity_type) params.append('entity_type', filters.entity_type)
-      if (filters.user_email) params.append('user_email', filters.user_email)
-      if (filters.date_from) params.append('date_from', filters.date_from)
-      if (filters.date_to) params.append('date_to', filters.date_to)
-      
+      const params = {}
+      if (filters.action_type) params.action_type = filters.action_type
+      if (filters.entity_type) params.entity_type = filters.entity_type
+      if (filters.user_email) params.user_email = filters.user_email
+      if (filters.date_from) params.date_from = filters.date_from
+      if (filters.date_to) params.date_to = filters.date_to
+
       // Limit to user's own actions unless CEO/PNC
       if (!isCEO && !isPNC) {
-        params.append('user_email', user?.email)
+        params.user_email = user?.email
       }
 
-      const response = await fetch(`http://localhost:8000/api/v2/audit-logs?${params.toString()}`)
-      if (response.ok) {
-        const data = await response.json()
-        setAuditLogs(data)
-      }
+      const response = await apiClient.auditLogs.getAll(params)
+      setAuditLogs(response.data || [])
     } catch (error) {
       toast.error('Failed to load history')
     } finally {

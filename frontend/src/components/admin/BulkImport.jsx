@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
+import { apiClient } from '../../lib/api'
 import toast from 'react-hot-toast'
 
 const BulkImport = () => {
@@ -31,51 +32,41 @@ const BulkImport = () => {
       const formData = new FormData()
       formData.append('file', file)
 
-      let url = ''
-      let params = new URLSearchParams()
+      let response
 
       switch (importType) {
         case 'staff':
-          url = 'http://localhost:8000/api/v2/import/staff'
+          response = await apiClient.import.staff(formData)
           break
         case 'eom-voters':
-          url = 'http://localhost:8000/api/v2/import/eom-voters'
-          params.append('cycle_id', importParams.cycle_id)
-          params.append('month', importParams.month)
-          params.append('year', importParams.year)
+          response = await apiClient.import.eomVoters(formData, {
+            cycle_id: importParams.cycle_id,
+            month: importParams.month,
+            year: importParams.year,
+          })
           break
         case 'eom-candidates':
-          url = 'http://localhost:8000/api/v2/import/eom-candidates'
+          response = await apiClient.import.eomCandidates(formData)
           break
         case 'weight-matrix':
-          url = 'http://localhost:8000/api/v2/import/weight-matrix'
-          params.append('cycle_id', importParams.cycle_id)
+          response = await apiClient.import.weightMatrix(formData, {
+            cycle_id: importParams.cycle_id,
+          })
           break
       }
 
-      const response = await fetch(`${url}?${params.toString()}`, {
-        method: 'POST',
-        body: formData
-      })
+      const result = response?.data
+      if (result?.error) {
+        toast.error(result.error)
+        return
+      }
 
-      if (response.ok) {
-        const result = await response.json()
-        if (result.error) {
-          toast.error(result.error)
-        } else {
-          toast.success(
-            `Successfully imported ${result.imported || result.count || 0} items`
-          )
-          if (result.errors && result.errors.length > 0) {
-            console.warn('Import errors:', result.errors)
-          }
-        }
-      } else {
-        const error = await response.json()
-        toast.error(error.detail || 'Import failed')
+      toast.success(`Successfully imported ${result?.imported || result?.count || 0} items`)
+      if (result?.errors && result.errors.length > 0) {
+        console.warn('Import errors:', result.errors)
       }
     } catch (error) {
-      toast.error('Failed to import file')
+      toast.error(error.response?.data?.detail || 'Failed to import file')
       console.error(error)
     } finally {
       setLoading(false)

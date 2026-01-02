@@ -44,7 +44,7 @@ const EOM_CATEGORIES = [
 ]
 
 const EOMNomination = ({ mode = 'nominate' }) => {
-  const { role, isCEO, isPNC, isDepartmentHead } = useAuth()
+  const { user, role, isCEO, isPNC, isDepartmentHead } = useAuth()
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [nomineeEmail, setNomineeEmail] = useState('')
   const [reason, setReason] = useState('')
@@ -231,24 +231,15 @@ const EOMNomination = ({ mode = 'nominate' }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v2/objections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eom_nominee_id: objectingNomination.id,
-          objector_email: user?.email,
-          reason: objectionReason
-        })
+      await apiClient.objections.submit({
+        eom_nominee_id: objectingNomination.id,
+        reason: objectionReason,
       })
 
-      if (response.ok) {
-        toast.success('Objection submitted successfully')
-        setShowObjectionModal(false)
-        setObjectionReason('')
-        setObjectingNomination(null)
-      } else {
-        toast.error('Failed to submit objection')
-      }
+      toast.success('Objection submitted successfully')
+      setShowObjectionModal(false)
+      setObjectionReason('')
+      setObjectingNomination(null)
     } catch (error) {
       toast.error('Failed to submit objection')
     }
@@ -318,18 +309,15 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                       className="w-full px-4 py-3 pl-10 border border-ese-accent-beige rounded-lg focus:ring-2 focus:ring-ese-lang-500 focus:border-ese-lang-500 outline-none"
                     />
                     <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                      <svg className="w-5 h-5 text-ese-ink-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
+                      <img src="/assets/icons/search.png" alt="" className="w-5 h-5" />
                     </div>
                     {voteSearchQuery && (
                       <button
                         onClick={() => setVoteSearchQuery('')}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ese-ink-blue hover:text-ese-ink-navy"
+                        aria-label="Clear search"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
                       </button>
                     )}
                   </div>
@@ -436,7 +424,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                           className="px-4 py-2 bg-ese-accent-terracotta text-white rounded-lg hover:opacity-90 text-sm flex items-center justify-center"
                           title="Object to this nomination"
                         >
-                          <img src="/assets/icons/warning_alert.png" alt="Object" className="w-5 h-5" onError={(e) => { e.target.src = "/assets/icons/waening_alert.png"; }} />
+                          <img src="/assets/icons/objection-warning.png" alt="Object" className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -767,4 +755,3 @@ const EOMNomination = ({ mode = 'nominate' }) => {
 }
 
 export default EOMNomination
-
