@@ -12,7 +12,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from ai_models.bias_algorithms import AdvancedBiasAlgorithms
+try:
+    from ai_models.bias_algorithms import AdvancedBiasAlgorithms
+except Exception:  # pragma: no cover
+    AdvancedBiasAlgorithms = None
 from backend.bias_detection import BiasDetector
 from backend.database import Assignment, Cycle, Evaluation, Person
 
@@ -70,7 +73,7 @@ class Complete360BiasDetection:
         self.db = db_session
         self.logger = logging.getLogger(__name__)
         self.bias_detector = BiasDetector(db_session)
-        self.advanced_detector = AdvancedBiasAlgorithms(db_session)
+        self.advanced_detector = AdvancedBiasAlgorithms(db_session) if AdvancedBiasAlgorithms else None
 
     def generate_complete_report(self, cycle_id: int) -> BiasReport:
         """
