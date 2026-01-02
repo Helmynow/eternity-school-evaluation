@@ -96,6 +96,7 @@ from backend.database import (
     EOMCategory,
     EOMCycle,
     EOMNominee,
+    EOMWinner,
     EOMVoter,
     Evaluation,
     Feedback,
