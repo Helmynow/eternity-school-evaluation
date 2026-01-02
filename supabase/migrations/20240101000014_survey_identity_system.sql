@@ -50,6 +50,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_survey_identity_preferences_updated_at ON survey_identity_preferences;
 CREATE TRIGGER update_survey_identity_preferences_updated_at
     BEFORE UPDATE ON survey_identity_preferences
     FOR EACH ROW
@@ -62,65 +63,79 @@ ALTER TABLE survey_identity_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE survey_identity_reveals ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own preferences
+DROP POLICY IF EXISTS survey_identity_preferences_select ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_select ON survey_identity_preferences
     FOR SELECT
     USING ((select auth.email()) = user_email);
 
 -- Users can insert/update their own preferences
+DROP POLICY IF EXISTS survey_identity_preferences_insert ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_insert ON survey_identity_preferences
     FOR INSERT
     WITH CHECK ((select auth.email()) = user_email);
 
+DROP POLICY IF EXISTS survey_identity_preferences_update ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_update ON survey_identity_preferences
     FOR UPDATE
     USING ((select auth.email()) = user_email);
 
+DROP POLICY IF EXISTS survey_identity_preferences_delete ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_delete ON survey_identity_preferences
     FOR DELETE
     USING ((select auth.email()) = user_email);
 
 -- Service role can do everything
+DROP POLICY IF EXISTS survey_identity_preferences_service_role_select ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_service_role_select ON survey_identity_preferences
     FOR SELECT
     USING ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_preferences_service_role_insert ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_service_role_insert ON survey_identity_preferences
     FOR INSERT
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_preferences_service_role_update ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_service_role_update ON survey_identity_preferences
     FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_preferences_service_role_delete ON survey_identity_preferences;
 CREATE POLICY survey_identity_preferences_service_role_delete ON survey_identity_preferences
     FOR DELETE
     USING ((select auth.role()) = 'service_role');
 
 -- Users can view their own reveals
+DROP POLICY IF EXISTS survey_identity_reveals_select ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_select ON survey_identity_reveals
     FOR SELECT
     USING ((select auth.email()) = user_email);
 
 -- Users can insert their own reveals
+DROP POLICY IF EXISTS survey_identity_reveals_insert ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_insert ON survey_identity_reveals
     FOR INSERT
     WITH CHECK ((select auth.email()) = user_email);
 
 -- Service role can do everything
+DROP POLICY IF EXISTS survey_identity_reveals_service_role_select ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_service_role_select ON survey_identity_reveals
     FOR SELECT
     USING ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_reveals_service_role_insert ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_service_role_insert ON survey_identity_reveals
     FOR INSERT
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_reveals_service_role_update ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_service_role_update ON survey_identity_reveals
     FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_identity_reveals_service_role_delete ON survey_identity_reveals;
 CREATE POLICY survey_identity_reveals_service_role_delete ON survey_identity_reveals
     FOR DELETE
     USING ((select auth.role()) = 'service_role');
