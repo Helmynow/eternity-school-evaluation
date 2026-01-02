@@ -185,6 +185,52 @@ COMMENT ON COLUMN eom_cycles.announcement_date IS 'Date when winners are announc
 -- 3. ADD WEIGHTED VOTING TO EOM VOTERS
 -- ============================================================================
 
+-- Ensure people.role_title exists (older deployments may have pre-existing people table without it)
+DO $$
+DECLARE
+    v_source_col TEXT;
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'people'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'people'
+              AND column_name = 'role_title'
+        ) THEN
+            ALTER TABLE public.people ADD COLUMN role_title VARCHAR(100);
+        END IF;
+
+        -- Best-effort backfill from common alternative column names
+        SELECT column_name
+        INTO v_source_col
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'people'
+          AND column_name IN ('role', 'job_title', 'position', 'title')
+        ORDER BY CASE column_name
+            WHEN 'role' THEN 1
+            WHEN 'job_title' THEN 2
+            WHEN 'position' THEN 3
+            WHEN 'title' THEN 4
+            ELSE 100
+        END
+        LIMIT 1;
+
+        IF v_source_col IS NOT NULL THEN
+            EXECUTE format(
+                'UPDATE public.people SET role_title = %I WHERE role_title IS NULL',
+                v_source_col
+            );
+        END IF;
+    END IF;
+END $$;
+
 ALTER TABLE eom_voters 
 ADD COLUMN IF NOT EXISTS vote_weight DECIMAL(5,2) DEFAULT 1.0;
 
