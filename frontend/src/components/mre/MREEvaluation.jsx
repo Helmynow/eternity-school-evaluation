@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAPI, useMutation } from '../../hooks/useAPI'
 import { apiClient } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -37,18 +37,22 @@ const MREEvaluation = () => {
   const [currentCycle, setCurrentCycle] = useState(null)
   const [targetGroup, setTargetGroup] = useState(null)
 
-  // Get current cycle
-  const { data: currentCycleData } = useAPI(
-    () => apiClient.cycles.getCurrent(),
+  // Get current cycle - use useMemo to stabilize the endpoint function
+  const getCurrentCycle = useCallback(() => apiClient.cycles.getCurrent(), [])
+  const { data: currentCycleData, loading: cycleLoading } = useAPI(
+    getCurrentCycle,
     { autoFetch: true }
   )
 
   useEffect(() => {
-    if (currentCycleData) {
+    if (currentCycleData && currentCycleData.id) {
       setCurrentCycle(currentCycleData)
       loadAssignments(currentCycleData.id)
+    } else if (!cycleLoading && currentCycleData === null) {
+      // No cycle available - show message or handle gracefully
+      setCurrentCycle(null)
     }
-  }, [currentCycleData])
+  }, [currentCycleData, cycleLoading])
 
   const loadAssignments = async (cycleId) => {
     try {

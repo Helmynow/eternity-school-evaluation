@@ -3,7 +3,7 @@
 ## Current Status ✅
 
 ### Completed
-- ✅ Backend API (Flask + FastAPI)
+- ✅ Backend API (FastAPI)
 - ✅ Database models and migrations (Supabase)
 - ✅ Bias detection algorithms
 - ✅ Weight matrix calculations
@@ -17,7 +17,7 @@
 ### Partially Complete
 - ⚠️ Frontend (basic components exist, needs full setup)
 - ⚠️ Authentication (RLS in place, but no auth middleware in APIs)
-- ⚠️ API documentation (FastAPI has auto-docs, Flask needs Swagger)
+- ⚠️ API documentation (FastAPI auto-docs need enhancement)
 
 ## Priority 1: Frontend Development 🎨
 
@@ -47,7 +47,6 @@
 ### 2.1 Supabase Auth Integration
 - [ ] Add Supabase client to backend
 - [ ] Create authentication middleware for FastAPI
-- [ ] Create authentication middleware for Flask
 - [ ] Implement JWT token validation
 - [ ] Add user role checking (admin, evaluator, etc.)
 
@@ -65,9 +64,8 @@
 - [ ] Document authentication requirements
 - [ ] Add error response schemas
 
-### 3.2 Flask API Documentation
-- [ ] Add Flask-RESTX or Flask-Swagger
-- [ ] Document all endpoints
+### 3.2 API Documentation Hygiene
+- [ ] Document authentication requirements
 - [ ] Add request/response examples
 - [ ] Create API versioning strategy
 
@@ -153,7 +151,7 @@
 
 3. **API Documentation** (1 day)
    - Enhance FastAPI OpenAPI docs
-   - Add Swagger to Flask API
+   - Document auth requirements and error schemas
 
 4. **Docker Setup** (1 day)
    - Create Dockerfiles
@@ -169,8 +167,8 @@
 
 ## Questions to Consider
 
-1. **Which API to use?** FastAPI (modern, async) or Flask (simpler, synchronous)?
-   - Recommendation: Use FastAPI for new endpoints, keep Flask for legacy
+1. **Which API to use?** FastAPI (modern, async)
+   - Recommendation: Use FastAPI only; Flask is deprecated
 
 2. **Frontend Framework?** React (current) or consider Next.js for SSR?
    - Recommendation: Continue with React, add Next.js later if needed
@@ -196,4 +194,3 @@
 - [ ] Zero critical security vulnerabilities
 - [ ] Successful deployment to production
 - [ ] User acceptance testing passed
-

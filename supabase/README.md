@@ -101,11 +101,20 @@ Sets up RLS policies:
 
 ## Database Connection
 
-The connection string is configured in `.env`:
+The connection string should be configured in `.env` (never commit to version control):
 
 ```env
-DATABASE_URL=postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
 ```
+
+**To get your connection string:**
+1. Go to Supabase Dashboard
+2. Select your project
+3. Go to Project Settings → Database
+4. Copy the connection string
+5. Replace `[YOUR-PASSWORD]` with your actual database password
+
+⚠️ **SECURITY**: Never commit database credentials to version control!
 
 ## Using Supabase Features
 

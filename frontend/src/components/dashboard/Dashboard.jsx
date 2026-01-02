@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAPI } from '../../hooks/useAPI'
 import { apiClient } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,9 +13,10 @@ const Dashboard = () => {
   const [biasReport, setBiasReport] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch cycles
+  // Fetch cycles - use useCallback to stabilize the endpoint function
+  const getAllCycles = useCallback(() => apiClient.cycles.getAll(), [])
   const { data: cyclesData, loading: cyclesLoading } = useAPI(
-    () => apiClient.cycles.getAll(),
+    getAllCycles,
     { autoFetch: true }
   )
 
@@ -138,7 +139,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-accent-mustard/20 flex items-center justify-center">
-                    <span className="text-2xl">⭐</span>
+                    <img src="/assets/icons/rising_star.png" alt="Star" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">⭐</span>' }} />
                   </div>
                 </div>
               </div>
@@ -152,7 +153,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-accent-terracotta/20 flex items-center justify-center">
-                    <span className="text-2xl">🗳️</span>
+                    <img src="/assets/icons/vote.png" alt="Vote" className="w-8 h-8" onError={(e) => { e.target.outerHTML = '<span className="text-2xl">🗳️</span>' }} />
                   </div>
                 </div>
               </div>
@@ -166,7 +167,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-lang-200 flex items-center justify-center">
-                    <span className="text-2xl">📝</span>
+                    <img src="/assets/icons/document.png" alt="Document" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">📝</span>' }} />
                   </div>
                 </div>
               </div>

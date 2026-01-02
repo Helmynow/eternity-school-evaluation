@@ -4,10 +4,17 @@ Tests edge cases, specific scenarios, and various bias types.
 """
 import pytest
 import numpy as np
+from itertools import cycle
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime, date, timedelta
 from backend.bias_detection import BiasDetector
 from backend.database import Evaluation, Assignment, Cycle, Person
+
+
+def cycling_side_effect(items):
+    """Create a side effect function that cycles through items indefinitely."""
+    iterator = cycle(items)
+    return lambda: next(iterator)
 
 
 @pytest.fixture
@@ -63,7 +70,7 @@ class TestRecencyBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         cycle_query = MagicMock()
         cycle_query.filter.return_value = cycle_query
@@ -113,7 +120,7 @@ class TestRecencyBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         cycle_query = MagicMock()
         cycle_query.filter.return_value = cycle_query
@@ -165,7 +172,7 @@ class TestRecencyBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         cycle_query = MagicMock()
         cycle_query.filter.return_value = cycle_query
@@ -277,7 +284,7 @@ class TestRoleBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query
@@ -362,7 +369,7 @@ class TestSimilarityBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query
@@ -411,7 +418,7 @@ class TestSimilarityBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query
@@ -536,7 +543,7 @@ class TestHarshnessBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query
@@ -595,7 +602,7 @@ class TestHarshnessBias:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query
@@ -769,7 +776,7 @@ class TestComprehensiveBiasReport:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         cycle_query = MagicMock()
         cycle_query.filter.return_value = cycle_query
@@ -876,7 +883,7 @@ class TestEdgeCases:
         
         assignment_query = MagicMock()
         assignment_query.filter.return_value = assignment_query
-        assignment_query.first.side_effect = assignments
+        assignment_query.first.side_effect = cycling_side_effect(assignments)
         
         mock_db_session.query.side_effect = lambda model: (
             eval_query if model == Evaluation else assignment_query

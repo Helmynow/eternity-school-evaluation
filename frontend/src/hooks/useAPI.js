@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiClient } from '../lib/api'
 
 export const useAPI = (endpoint, options = {}) => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const hasFetched = useRef(false)
+  const isFetching = useRef(false)
 
   const fetchData = useCallback(async () => {
-    if (!endpoint) return
+    if (!endpoint || isFetching.current) return
     
+    isFetching.current = true
     setLoading(true)
     setError(null)
     
@@ -16,21 +19,32 @@ export const useAPI = (endpoint, options = {}) => {
       const response = await endpoint()
       setData(response.data)
       setError(null)
+      hasFetched.current = true
     } catch (err) {
-      setError(err)
-      setData(null)
+      // Only set error if it's a real error (not just null/empty response)
+      if (err?.response?.status !== 404 && err?.response?.status !== 200) {
+        setError(err)
+      } else {
+        // 404 or empty response is OK - just set data to null
+        setData(null)
+        setError(null)
+      }
+      hasFetched.current = true
     } finally {
       setLoading(false)
+      isFetching.current = false
     }
   }, [endpoint])
 
   useEffect(() => {
-    if (options.autoFetch !== false) {
+    if (options.autoFetch !== false && !hasFetched.current && !isFetching.current) {
       fetchData()
     }
-  }, [fetchData, options.autoFetch])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount - endpoint function reference is stable
 
   const refetch = useCallback(() => {
+    hasFetched.current = false
     fetchData()
   }, [fetchData])
 

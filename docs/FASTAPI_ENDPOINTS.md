@@ -10,6 +10,14 @@ The FastAPI application provides high-performance endpoints for the Eternity Sch
 http://localhost:8000
 ```
 
+## Authentication (Optional)
+
+If API key auth is enabled (`REQUIRE_API_KEY=true`), include:
+
+```
+Header: x-api-key: <your-api-key>
+```
+
 ## API Documentation
 
 - **Swagger UI**: `http://localhost:8000/docs`
@@ -333,12 +341,6 @@ curl "http://localhost:8000/api/v2/reports/ceo/1?format=csv" \
 - Background tasks for audit logging don't block responses
 - Large exports use streaming responses to avoid memory issues
 
-## Migration from Flask
+## Flask Deprecation
 
-The FastAPI endpoints are designed to work alongside the existing Flask application. Both can run simultaneously on different ports:
-
-- Flask: `http://localhost:5000`
-- FastAPI: `http://localhost:8000`
-
-Gradually migrate endpoints from Flask to FastAPI as needed.
-
+FastAPI is the primary and only supported API. The legacy Flask app is deprecated and should not be used.

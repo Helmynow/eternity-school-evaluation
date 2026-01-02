@@ -17,8 +17,10 @@ Supabase is an open-source Firebase alternative that provides:
 ## Project Configuration
 
 - **Project ID**: `ywcfqlyhesnikclesgpr`
-- **Database URL**: `postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres`
+- **Database URL**: Get from Supabase Dashboard → Project Settings → Database → Connection string
 - **API URL**: `https://ywcfqlyhesnikclesgpr.supabase.co`
+
+⚠️ **SECURITY**: Never commit database credentials to version control. Store them in `.env` file.
 
 ## Quick Start
 

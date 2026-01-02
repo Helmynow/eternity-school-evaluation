@@ -106,7 +106,7 @@ assignment = Assignment(
 - Helper class for creating audit entries
 - Methods for common actions (log_create, log_update, etc.)
 - Query methods for audit history
-- Automatic IP/user agent capture from Flask request
+- Automatic IP/user agent capture from request metadata (FastAPI/Starlette compatible)
 
 **Usage:**
 ```python
@@ -183,4 +183,3 @@ When upgrading existing databases:
 3. Integrate AuditLogger into API endpoints
 4. Implement rotation eligibility checks in EOM nomination logic
 5. Update weight matrix handler to use new WeightMatrix model
-

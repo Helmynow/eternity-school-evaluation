@@ -154,14 +154,14 @@ class EOMTestDataGenerator:
         """Generate test rotation rules"""
         rules_data = [
             {
-                'category': EOMCategory.ACADEMIC,
+                'category': EOMCategory.OUTSTANDING_LEADERSHIP,
                 'cooldown_period': 3,  # 3 months cooldown
                 'max_wins_per_period': 1,
                 'period_type': 'quarter',
                 'max_nominations_per_year': 2
             },
             {
-                'category': EOMCategory.ADMIN,
+                'category': EOMCategory.SERVICE_EXCELLENCE,
                 'cooldown_period': 2,  # 2 months cooldown
                 'max_wins_per_period': 1,
                 'period_type': 'quarter',

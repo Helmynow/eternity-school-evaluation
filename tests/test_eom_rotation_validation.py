@@ -37,7 +37,7 @@ def sample_rotation_rule():
     """Create a sample rotation rule"""
     rule = Mock(spec=EOMRotationRule)
     rule.id = 1
-    rule.category = EOMCategory.ACADEMIC
+    rule.category = EOMCategory.OUTSTANDING_LEADERSHIP
     rule.cycle_id = 1
     rule.cooldown_period = 3
     rule.max_wins_per_period = 1
@@ -283,7 +283,7 @@ class TestRotationRuleManagement:
         mock_db_session.refresh = Mock()
         
         rule = validator.create_rotation_rule(
-            category=EOMCategory.ACADEMIC,
+            category=EOMCategory.OUTSTANDING_LEADERSHIP,
             cycle_id=1,
             cooldown_period=3,
             max_wins_per_period=1,
@@ -368,7 +368,7 @@ class TestEligibilityChecking:
         
         eligibility = validator.check_nominee_rotation_eligibility(
             nominee_email='teacher1@example.com',
-            category=EOMCategory.ACADEMIC,
+            category=EOMCategory.OUTSTANDING_LEADERSHIP,
             eom_cycle_id=1
         )
         
@@ -403,7 +403,7 @@ class TestEligibilityChecking:
         
         eligibility = validator.check_nominee_rotation_eligibility(
             nominee_email='teacher1@example.com',
-            category=EOMCategory.ACADEMIC,
+            category=EOMCategory.OUTSTANDING_LEADERSHIP,
             eom_cycle_id=1
         )
         
@@ -610,7 +610,7 @@ class TestAnalytics:
         
         history = validator.get_nominee_rotation_history(
             nominee_email='teacher1@example.com',
-            category=EOMCategory.ACADEMIC
+            category=EOMCategory.OUTSTANDING_LEADERSHIP
         )
         
         assert 'nominee_email' in history

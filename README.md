@@ -16,7 +16,8 @@ A comprehensive fair evaluation system for schools, featuring bias detection, we
 ```
 eternity-school-evaluation/
 ├── backend/
-│   ├── app.py                 # Flask API server
+│   ├── fastapi_app.py         # FastAPI API server (primary)
+│   ├── app.py                 # Deprecated entrypoint (prints FastAPI usage)
 │   ├── database.py            # SQLAlchemy models and database connection
 │   ├── bias_detection.py     # Bias detection algorithms
 │   └── weight_matrix.py       # Weight matrix calculations
@@ -49,7 +50,7 @@ eternity-school-evaluation/
    
    **Note:** The `.env` file is already configured with your Supabase connection string.
 
-2. **Run the Flask server**:
+2. **Run the FastAPI server**:
    ```bash
    ./run.sh
    ```
@@ -57,11 +58,12 @@ eternity-school-evaluation/
    Or manually:
    ```bash
    source venv/bin/activate
-   cd backend
-   python app.py
+   uvicorn backend.fastapi_app:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-   The API will be available at `http://localhost:5000`
+   The API will be available at `http://localhost:8000`
+   
+   **Note:** `backend/app.py` is deprecated and only prints FastAPI usage.
 
 ### Manual Setup (Alternative)
 
@@ -78,14 +80,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Set database URL (or use .env file)
-export DATABASE_URL="postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres"
+export DATABASE_URL="postgresql://user:password@localhost/eternity_eval"
 
 # Create database tables
 python3 -c "from backend.database import Database; db = Database(); db.create_tables(); print('Tables created!')"
 
 # Run the server
-cd backend
-python app.py
+uvicorn backend.fastapi_app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Note:** The database connection uses environment variables loaded from `.env` file via `python-dotenv`.
@@ -101,6 +102,8 @@ npm install
 2. Start the development server (configure based on your frontend framework)
 
 ## API Endpoints
+
+**Optional API Key:** If `REQUIRE_API_KEY=true`, include `x-api-key: <your-key>` in requests.
 
 ### Cycles
 - `GET /api/cycles` - List all cycles
@@ -281,4 +284,3 @@ pytest tests/
 ## License
 
 [Your License Here]
-

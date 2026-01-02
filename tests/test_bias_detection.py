@@ -3,6 +3,7 @@ Tests for bias detection algorithms.
 """
 import pytest
 import numpy as np
+from itertools import cycle
 from unittest.mock import Mock, MagicMock
 from backend.bias_detection import BiasDetector
 from backend.database import Evaluation, Assignment, Cycle
@@ -78,10 +79,11 @@ def test_detect_harshness_bias(mock_db_session, sample_evaluations, sample_assig
     eval_query.filter.return_value = eval_query
     eval_query.all.return_value = sample_evaluations
     
-    # Mock assignment query
+    # Mock assignment query - use cycle to avoid StopIteration
+    assignment_iter = cycle(sample_assignments)
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = lambda: next(assignment_iter)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
@@ -120,9 +122,11 @@ def test_detect_similarity_bias(mock_db_session, sample_evaluations, sample_assi
     eval_query.filter.return_value = eval_query
     eval_query.all.return_value = sample_evaluations
     
+    # Use cycle to avoid StopIteration
+    assignment_iter = cycle(sample_assignments)
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = lambda: next(assignment_iter)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
@@ -169,16 +173,18 @@ def test_comprehensive_bias_report(mock_db_session, sample_evaluations, sample_a
     eval_query.filter.return_value = eval_query
     eval_query.all.return_value = sample_evaluations
     
+    # Use cycle to avoid StopIteration
+    assignment_iter = cycle(sample_assignments)
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = lambda: next(assignment_iter)
     
     cycle_query = MagicMock()
     cycle_query.filter.return_value = cycle_query
-    cycle = Mock(spec=Cycle)
-    cycle.id = 1
-    cycle.start_date = Mock()
-    cycle_query.first.return_value = cycle
+    cycle_mock = Mock(spec=Cycle)
+    cycle_mock.id = 1
+    cycle_mock.start_date = Mock()
+    cycle_query.first.return_value = cycle_mock
     
     mock_db_session.query.side_effect = lambda model: {
         Evaluation: eval_query,

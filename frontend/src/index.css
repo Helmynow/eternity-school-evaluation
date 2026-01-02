@@ -51,3 +51,165 @@
   }
 }
 
+/* ========================================
+   7. NAVIGATION BAR - CARD STYLE
+   ======================================== */
+
+/* New clean card-based navigation */
+.ese-nav-card-band {
+  background: var(--ese-ink-navy);
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.ese-nav-card-container {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 1rem;
+  max-width: var(--ese-grid-max-width, 1280px);
+  width: 100%;
+}
+
+.ese-nav-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  min-width: 6.5rem;
+  background: var(--ese-ink-white);
+  border: none;
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  text-decoration: none;
+  /* Embossed card effect with ring */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.04),
+    inset 0 0 0 1px var(--ese-accent-beige),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ese-nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    0 8px 24px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px var(--ese-accent-beige),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ese-nav-card:active {
+  transform: translateY(0);
+}
+
+.ese-nav-card:focus-visible {
+  outline: 2px solid var(--ese-int-2c5b4c);
+  outline-offset: 2px;
+}
+
+/* Active state - Green background, white text */
+.ese-nav-card--active {
+  background: var(--ese-int-2c5b4c);
+  color: var(--ese-ink-white);
+  box-shadow:
+    0 4px 12px rgba(44, 91, 76, 0.25),
+    0 8px 24px rgba(44, 91, 76, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.ese-nav-card--active:hover {
+  background: var(--ese-int-487557);
+  box-shadow:
+    0 6px 16px rgba(44, 91, 76, 0.3),
+    0 12px 32px rgba(44, 91, 76, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Active state (Dashboard only) - Teal gradient */
+.ese-nav-card--active-dashboard {
+  background: linear-gradient(135deg, var(--ese-accent-deep-teal) 0%, var(--ese-int-7ca48a) 100%);
+  color: var(--ese-ink-white);
+  box-shadow:
+    0 4px 12px rgba(41, 84, 76, 0.22),
+    0 10px 28px rgba(41, 84, 76, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.ese-nav-card--active-dashboard:hover {
+  background: linear-gradient(135deg, var(--ese-int-2c5b4c) 0%, var(--ese-int-7ca48a) 100%);
+  box-shadow:
+    0 6px 16px rgba(41, 84, 76, 0.28),
+    0 14px 34px rgba(41, 84, 76, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/* Icon container */
+.ese-nav-card__icon {
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ese-nav-card__icon-graphic {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease,
+    filter 0.2s ease;
+  opacity: 0.92;
+}
+
+.ese-nav-card__icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Some UU2 SVGs are extremely light; provide minimal contrast without changing assets. */
+.ese-nav-card__icon-img--boost {
+  opacity: 1;
+  filter: contrast(1.2) saturate(1.1);
+}
+
+/* White-on-transparent SVGs can disappear on white cards. Invert them for readability. */
+.ese-nav-card__icon-img--invert {
+  opacity: 1;
+  filter: invert(1) hue-rotate(180deg) contrast(1.1);
+}
+
+.ese-nav-card:hover .ese-nav-card__icon-graphic {
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+/* Label */
+.ese-nav-card__label {
+  font-family: var(--font-body, 'Plus Jakarta Sans', sans-serif);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ese-ink-navy);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.ese-nav-card--active .ese-nav-card__label {
+  color: var(--ese-ink-white);
+}
+
+.ese-nav-card--active-dashboard .ese-nav-card__label {
+  color: var(--ese-ink-white);
+}
+

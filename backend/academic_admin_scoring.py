@@ -49,29 +49,31 @@ class AcademicAdminScoring:
     """
     
     # Academic Staff Weight Matrix
-    # Academic staff: Emphasize QA, peer review, manager review
+    # Based on original design: Stage principal 30%, P&C 25%, Coordinator/HOD 25%, Director/CEO 15%, Self 5%
     ACADEMIC_WEIGHT_MATRIX = {
-        'CEO': 1.0,           # Full weight - CEO evaluation critical
-        'P&C': 0.8,           # High weight - People & Culture perspective
-        'QA': 1.0,            # Full weight - Quality Assurance critical for academics
-        'peer_review': 0.9,   # High weight - Peer evaluation very important
-        'manager_review': 1.0, # Full weight - Manager evaluation critical
-        'direct_report_review': 0.7,  # Medium-high - Direct reports provide insight
-        'self_review': 0.5,   # Lower weight - Self-assessment
-        '360_review': 0.85    # High weight - Comprehensive view
+        'CEO': 0.15,           # Director/CEO: 15%
+        'P&C': 0.25,           # People & Culture: 25%
+        'QA': 0.0,             # Not in original design
+        'peer_review': 0.0,    # Not in original design
+        'manager_review': 0.30, # Stage principal: 30%
+        'coordinator_hod': 0.25, # Coordinator/HOD: 25%
+        'direct_report_review': 0.0,
+        'self_review': 0.05,   # Self-evaluation: 5%
+        '360_review': 0.0
     }
     
     # Admin Staff Weight Matrix
-    # Admin staff: Emphasize P&C, manager review, operational efficiency
+    # Based on original design: Department head 40%, P&C 20%, Peer 10%, QA 10%, CEO 15%, Self 5%
     ADMIN_WEIGHT_MATRIX = {
-        'CEO': 1.0,           # Full weight - CEO evaluation critical
-        'P&C': 1.0,           # Full weight - People & Culture critical for admin
-        'QA': 0.7,            # Lower weight - Less emphasis on QA for admin
-        'peer_review': 0.8,   # High weight - Peer evaluation important
-        'manager_review': 1.0, # Full weight - Manager evaluation critical
-        'direct_report_review': 0.6,  # Medium - Direct reports provide feedback
-        'self_review': 0.5,   # Lower weight - Self-assessment
-        '360_review': 0.85    # High weight - Comprehensive view
+        'CEO': 0.15,           # CEO: 15%
+        'P&C': 0.20,           # People & Culture: 20%
+        'QA': 0.10,            # Quality Assurance: 10%
+        'peer_review': 0.10,   # Peer: 10%
+        'manager_review': 0.40, # Department head/manager: 40%
+        'coordinator_hod': 0.0,
+        'direct_report_review': 0.0,
+        'self_review': 0.05,   # Self-evaluation: 5%
+        '360_review': 0.0
     }
     
     # Minimum evaluations required per staff type

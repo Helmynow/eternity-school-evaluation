@@ -64,4 +64,4 @@ htmlcov/
 *.cover
 .hypothesis/
 .pytest_cache/
-
+.vercel

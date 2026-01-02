@@ -1,11 +1,19 @@
 """
 Audit logging utility for tracking all system actions.
+Supports FastAPI request objects.
 """
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import Optional, Dict, Any
-from flask import request
+from typing import Optional, Dict, Any, Union
 from backend.database import AuditLog, ActionType, Person
+
+# Type hints for request objects (avoid circular import)
+try:
+    from fastapi import Request as FastAPIRequest
+except ImportError:
+    FastAPIRequest = None
+
+RequestType = Union[FastAPIRequest, Any]
 
 
 class AuditLogger:
@@ -23,10 +31,14 @@ class AuditLogger:
         description: Optional[str] = None,
         changes: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None
     ) -> AuditLog:
         """
         Create an audit log entry.
+        
+        Supports FastAPI Request objects.
+        Thread-safe for use in async FastAPI contexts.
         
         Args:
             action_type: Type of action (CREATE, UPDATE, DELETE, etc.)
@@ -35,8 +47,9 @@ class AuditLogger:
             user_email: Email of the user performing the action
             description: Human-readable description
             changes: Dictionary with 'before' and 'after' keys for updates
-            ip_address: IP address of the user
-            user_agent: User agent string
+            ip_address: IP address of the user (auto-extracted from request if not provided)
+            user_agent: User agent string (auto-extracted from request if not provided)
+            request_obj: FastAPI Request object (optional)
         
         Returns:
             Created AuditLog instance
@@ -45,11 +58,25 @@ class AuditLogger:
         user = self.db.query(Person).filter(Person.email == user_email).first()
         user_role = user.role_title if user else None
         
-        # Get IP and user agent from request if available
-        if ip_address is None and hasattr(request, 'remote_addr'):
-            ip_address = request.remote_addr
-        if user_agent is None and hasattr(request, 'user_agent'):
-            user_agent = str(request.user_agent)
+        # Extract IP and user agent from request if available
+        if request_obj is not None:
+            if ip_address is None:
+                # FastAPI Request object
+                if hasattr(request_obj, "client") and request_obj.client:
+                    ip_address = request_obj.client.host
+                # Try to get from headers as fallback
+                elif hasattr(request_obj, "headers"):
+                    # Check for X-Forwarded-For or X-Real-IP headers (common in proxies)
+                    forwarded_for = request_obj.headers.get("x-forwarded-for")
+                    if forwarded_for:
+                        ip_address = forwarded_for.split(",")[0].strip()
+                    else:
+                        ip_address = request_obj.headers.get("x-real-ip")
+            
+            if user_agent is None:
+                # FastAPI Request object
+                if hasattr(request_obj, "headers"):
+                    user_agent = request_obj.headers.get("user-agent")
         
         audit_entry = AuditLog(
             action_type=action_type,
@@ -155,4 +182,3 @@ class AuditLogger:
             query = query.filter(AuditLog.action_type == action_type)
         
         return query.order_by(AuditLog.created_at.desc()).limit(limit).all()
-

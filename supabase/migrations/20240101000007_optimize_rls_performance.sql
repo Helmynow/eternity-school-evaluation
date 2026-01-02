@@ -217,38 +217,52 @@ CREATE POLICY "Rotation rules are deletable by service role"
 
 -- Weight Matrices policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Weight matrices are viewable by authenticated users" ON weight_matrices;
-DROP POLICY IF EXISTS "Weight matrices are modifiable by service role" ON weight_matrices;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'weight_matrices') THEN
+        DROP POLICY IF EXISTS "Weight matrices are modifiable by service role" ON weight_matrices;
+        DROP POLICY IF EXISTS "Weight matrices are viewable by authenticated users" ON weight_matrices;
+        DROP POLICY IF EXISTS "Weight matrices are insertable by service role" ON weight_matrices;
+        DROP POLICY IF EXISTS "Weight matrices are updatable by service role" ON weight_matrices;
+        DROP POLICY IF EXISTS "Weight matrices are deletable by service role" ON weight_matrices;
 
--- SELECT: authenticated users only
-CREATE POLICY "Weight matrices are viewable by authenticated users"
-    ON weight_matrices FOR SELECT
-    USING ((select auth.role()) = 'authenticated');
+        -- SELECT: authenticated users only
+        CREATE POLICY "Weight matrices are viewable by authenticated users"
+            ON weight_matrices FOR SELECT
+            USING ((select auth.role()) = 'authenticated');
 
--- Write operations: service_role only
-CREATE POLICY "Weight matrices are insertable by service role"
-    ON weight_matrices FOR INSERT
-    WITH CHECK ((select auth.role()) = 'service_role');
+        -- Write operations: service_role only
+        CREATE POLICY "Weight matrices are insertable by service role"
+            ON weight_matrices FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
 
-CREATE POLICY "Weight matrices are updatable by service role"
-    ON weight_matrices FOR UPDATE
-    USING ((select auth.role()) = 'service_role')
-    WITH CHECK ((select auth.role()) = 'service_role');
+        CREATE POLICY "Weight matrices are updatable by service role"
+            ON weight_matrices FOR UPDATE
+            USING ((select auth.role()) = 'service_role')
+            WITH CHECK ((select auth.role()) = 'service_role');
 
-CREATE POLICY "Weight matrices are deletable by service role"
-    ON weight_matrices FOR DELETE
-    USING ((select auth.role()) = 'service_role');
+        CREATE POLICY "Weight matrices are deletable by service role"
+            ON weight_matrices FOR DELETE
+            USING ((select auth.role()) = 'service_role');
+    END IF;
+END $$;
 
 -- Audit Logs policies
-DROP POLICY IF EXISTS "Audit logs are viewable by service role only" ON audit_logs;
-DROP POLICY IF EXISTS "Audit logs are insertable by service role" ON audit_logs;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_logs') THEN
+        DROP POLICY IF EXISTS "Audit logs are viewable by service role only" ON audit_logs;
+        DROP POLICY IF EXISTS "Audit logs are insertable by service role" ON audit_logs;
 
-CREATE POLICY "Audit logs are viewable by service role only"
-    ON audit_logs FOR SELECT
-    USING ((select auth.role()) = 'service_role');
+        CREATE POLICY "Audit logs are viewable by service role only"
+            ON audit_logs FOR SELECT
+            USING ((select auth.role()) = 'service_role');
 
-CREATE POLICY "Audit logs are insertable by service role"
-    ON audit_logs FOR INSERT
-    WITH CHECK ((select auth.role()) = 'service_role');
+        CREATE POLICY "Audit logs are insertable by service role"
+            ON audit_logs FOR INSERT
+            WITH CHECK ((select auth.role()) = 'service_role');
+    END IF;
+END $$;
 
 -- ============================================================================
 -- FIX POLICIES FOR LEGACY TABLES (if they exist)
@@ -400,4 +414,3 @@ END $$;
 
 -- Remove duplicate people_select_all policy if it exists
 DROP POLICY IF EXISTS "people_select_all" ON people;
-

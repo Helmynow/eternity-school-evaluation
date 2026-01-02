@@ -94,6 +94,22 @@ class EOMNominationValidator:
                 details=details
             )
         
+        # Check nomination window (15th of month, 7-day window)
+        window_check = self._check_nomination_window(eom_cycle)
+        if not window_check['is_valid']:
+            errors.extend(window_check['errors'])
+        if window_check.get('warnings'):
+            warnings.extend(window_check['warnings'])
+        details['nomination_window_check'] = window_check
+        
+        # Check nomination window (15th of month, 7-day window)
+        window_check = self._check_nomination_window(eom_cycle)
+        if not window_check['is_valid']:
+            errors.extend(window_check['errors'])
+        if window_check.get('warnings'):
+            warnings.extend(window_check['warnings'])
+        details['nomination_window_check'] = window_check
+        
         # Get cycle information for term calculation
         cycle = self.db.query(Cycle).filter(Cycle.id == eom_cycle.cycle_id).first()
         if cycle:
@@ -943,6 +959,60 @@ class EOMNominationValidator:
             'is_valid': len(errors) == 0,
             'errors': errors,
             'warnings': warnings
+        }
+    
+    def _check_nomination_window(self, eom_cycle: EOMCycle) -> Dict:
+        """
+        Check if current date is within nomination window.
+        Original design: Opens on 15th of month for 7 days.
+        
+        Args:
+            eom_cycle: EOM cycle object
+            
+        Returns:
+            Dictionary with validation results
+        """
+        errors = []
+        warnings = []
+        today = date.today()
+        
+        # Get window settings (default: 15th of month, 7 days)
+        window_start_day = getattr(eom_cycle, 'nomination_window_start_day', 15)
+        window_duration = getattr(eom_cycle, 'nomination_window_duration_days', 7)
+        
+        # Calculate window dates for the cycle month
+        cycle_date = date(eom_cycle.year, eom_cycle.month, 1)
+        window_start = date(eom_cycle.year, eom_cycle.month, min(window_start_day, 28))
+        window_end = window_start + timedelta(days=window_duration - 1)
+        
+        # Check if today is within window
+        if today < window_start:
+            days_until_open = (window_start - today).days
+            errors.append(
+                f"Nomination window opens on {window_start.strftime('%B %d, %Y')} "
+                f"({days_until_open} days from now)"
+            )
+        elif today > window_end:
+            days_since_close = (today - window_end).days
+            errors.append(
+                f"Nomination window closed on {window_end.strftime('%B %d, %Y')} "
+                f"({days_since_close} days ago)"
+            )
+        else:
+            days_remaining = (window_end - today).days
+            if days_remaining <= 1:
+                warnings.append(
+                    f"Nomination window closes in {days_remaining} day(s)"
+                )
+        
+        return {
+            'is_valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'window_start': window_start.isoformat(),
+            'window_end': window_end.isoformat(),
+            'today': today.isoformat(),
+            'is_within_window': window_start <= today <= window_end
         }
     
     def _calculate_term(self, month: int, year: int, cycle: Optional[Cycle] = None) -> str:

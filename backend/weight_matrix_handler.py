@@ -40,26 +40,31 @@ class WeightMatrixHandler:
     """
     
     # Default weight matrix: [target_group][rater_context] = weight
+    # Based on original design document percentages
     DEFAULT_WEIGHT_MATRIX = {
         'academic': {
-            'CEO': 1.0,
-            'P&C': 0.8,
-            'QA': 0.9,
-            'peer_review': 0.7,
-            'manager_review': 1.0,
-            'direct_report_review': 0.6,
-            'self_review': 0.5,
-            '360_review': 0.85
+            # Original: Stage principal 30%, P&C 25%, Coordinator/HOD 25%, Director/CEO 15%, Self 5%
+            'CEO': 0.15,           # Director/CEO: 15%
+            'P&C': 0.25,           # People & Culture: 25%
+            'QA': 0.0,             # Not in original design for academic
+            'peer_review': 0.0,    # Not in original design for academic
+            'manager_review': 0.30, # Stage principal: 30%
+            'coordinator_hod': 0.25, # Coordinator/HOD: 25% (new rater type)
+            'direct_report_review': 0.0,
+            'self_review': 0.05,   # Self-evaluation: 5%
+            '360_review': 0.0
         },
         'admin': {
-            'CEO': 1.0,
-            'P&C': 0.9,
-            'QA': 0.7,
-            'peer_review': 0.8,
-            'manager_review': 1.0,
-            'direct_report_review': 0.6,
-            'self_review': 0.5,
-            '360_review': 0.85
+            # Original: Department head 40%, P&C 20%, Peer 10%, QA 10%, CEO 15%, Self 5%
+            'CEO': 0.15,           # CEO: 15%
+            'P&C': 0.20,            # People & Culture: 20%
+            'QA': 0.10,            # Quality Assurance: 10%
+            'peer_review': 0.10,   # Peer: 10%
+            'manager_review': 0.40, # Department head/manager: 40%
+            'coordinator_hod': 0.0,
+            'direct_report_review': 0.0,
+            'self_review': 0.05,   # Self-evaluation: 5%
+            '360_review': 0.0
         },
         'peers': {
             'CEO': 0.8,

@@ -80,7 +80,7 @@ git log --oneline
 
 Your repository includes:
 
-- **Backend**: Flask and FastAPI applications
+- **Backend**: FastAPI application (Flask deprecated)
 - **Frontend**: React components
 - **AI Models**: Bias detection algorithms
 - **Tests**: Comprehensive test suite
@@ -145,4 +145,3 @@ git remote set-url origin NEW_URL
 
 Once created, your repository will be available at:
 `https://github.com/YOUR_USERNAME/eternity-school-evaluation`
-

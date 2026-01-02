@@ -3,9 +3,16 @@ Tests for Complete 360-Degree Bias Detection System.
 """
 import pytest
 import numpy as np
+from itertools import cycle
 from unittest.mock import Mock, MagicMock
 from backend.bias_detection_360 import Complete360BiasDetection, BiasFinding, BiasReport
 from backend.database import Evaluation, Assignment, Cycle
+
+
+def cycling_side_effect(items):
+    """Create a side effect function that cycles through items indefinitely."""
+    iterator = cycle(items)
+    return lambda: next(iterator)
 
 
 @pytest.fixture
@@ -61,14 +68,14 @@ def test_generate_complete_report(mock_db_session, sample_evaluations, sample_as
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
     assignment_query.all.return_value = sample_assignments
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     cycle_query = MagicMock()
     cycle_query.filter.return_value = cycle_query
-    cycle = Mock(spec=Cycle)
-    cycle.id = 1
-    cycle.start_date = Mock()
-    cycle_query.first.return_value = cycle
+    cycle_mock = Mock(spec=Cycle)
+    cycle_mock.id = 1
+    cycle_mock.start_date = Mock()
+    cycle_query.first.return_value = cycle_mock
     
     mock_db_session.query.side_effect = lambda model: {
         Evaluation: eval_query,
@@ -147,7 +154,7 @@ def test_get_bias_summary_by_target(mock_db_session, sample_evaluations, sample_
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
     assignment_query.all.return_value = sample_assignments
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query

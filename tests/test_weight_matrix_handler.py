@@ -3,9 +3,16 @@ Tests for WeightMatrixHandler class.
 """
 import pytest
 import numpy as np
+from itertools import cycle
 from unittest.mock import Mock, MagicMock
 from backend.weight_matrix_handler import WeightMatrixHandler, ValidationResult
 from backend.database import Evaluation, Assignment
+
+
+def cycling_side_effect(items):
+    """Create a side effect function that cycles through items indefinitely."""
+    iterator = cycle(items)
+    return lambda: next(iterator)
 
 
 @pytest.fixture
@@ -76,7 +83,7 @@ def test_load_evaluations(mock_db_session, sample_evaluations, sample_assignment
     
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
@@ -98,7 +105,7 @@ def test_calculate_final_scores(mock_db_session, sample_evaluations, sample_assi
     
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
@@ -127,7 +134,7 @@ def test_validate_evaluations(mock_db_session, sample_evaluations, sample_assign
     
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
@@ -163,7 +170,7 @@ def test_get_evaluation_summary(mock_db_session, sample_evaluations, sample_assi
     
     assignment_query = MagicMock()
     assignment_query.filter.return_value = assignment_query
-    assignment_query.first.side_effect = sample_assignments
+    assignment_query.first.side_effect = cycling_side_effect(sample_assignments)
     
     mock_db_session.query.side_effect = lambda model: (
         eval_query if model == Evaluation else assignment_query
