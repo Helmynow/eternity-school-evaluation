@@ -5,7 +5,7 @@ For production use with multiple server instances
 
 import os
 import time
-from typing import Optional
+from typing import Optional, Tuple
 
 import redis
 from fastapi import Request
