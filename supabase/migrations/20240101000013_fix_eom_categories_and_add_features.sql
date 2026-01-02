@@ -196,16 +196,26 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- Set vote weights based on role (if not already set)
     IF NEW.vote_weight IS NULL OR NEW.vote_weight = 1.0 THEN
-        -- Check role from people table or voter role
-        IF NEW.voter_role ILIKE '%principal%' OR NEW.voter_role ILIKE '%stage principal%' THEN
+        -- Determine voter role title from people table
+        DECLARE
+            v_role_title TEXT;
+        BEGIN
+            SELECT role_title INTO v_role_title
+            FROM people
+            WHERE email = NEW.voter_email;
+
+            v_role_title := COALESCE(v_role_title, '');
+
+            IF v_role_title ILIKE '%principal%' OR v_role_title ILIKE '%stage principal%' THEN
             NEW.vote_weight := 0.40;
-        ELSIF NEW.voter_role ILIKE '%manager%' OR NEW.voter_role ILIKE '%head%' THEN
+            ELSIF v_role_title ILIKE '%manager%' OR v_role_title ILIKE '%head%' THEN
             NEW.vote_weight := 0.30;
-        ELSIF NEW.voter_role ILIKE '%CEO%' OR NEW.voter_role ILIKE '%director%' THEN
+            ELSIF v_role_title ILIKE '%ceo%' OR v_role_title ILIKE '%director%' THEN
             NEW.vote_weight := 0.30;
-        ELSE
+            ELSE
             NEW.vote_weight := 1.0; -- Default equal weight
-        END IF;
+            END IF;
+        END;
     END IF;
     RETURN NEW;
 END;
@@ -282,7 +292,7 @@ CREATE TRIGGER trigger_calculate_variance
 CREATE OR REPLACE VIEW eom_diversity_tracking AS
 SELECT 
     ec.id as cycle_id,
-    ec.name as cycle_name,
+    c.name as cycle_name,
     ew.category,
     p.segment,
     p.department,
@@ -290,10 +300,11 @@ SELECT
     COUNT(DISTINCT ew.winner_email) as winners_count,
     COUNT(DISTINCT en.nominee_email) as nominees_count
 FROM eom_cycles ec
+JOIN cycles c ON c.id = ec.cycle_id
 LEFT JOIN eom_winners ew ON ew.eom_cycle_id = ec.id
 LEFT JOIN eom_nominees en ON en.eom_cycle_id = ec.id
 LEFT JOIN people p ON p.email = COALESCE(ew.winner_email, en.nominee_email)
-GROUP BY ec.id, ec.name, ew.category, p.segment, p.department, p.role_title;
+GROUP BY ec.id, c.name, ew.category, p.segment, p.department, p.role_title;
 
 COMMENT ON VIEW eom_diversity_tracking IS 'Tracks EOM recognition across gender, department, and role for diversity monitoring';
 
@@ -326,9 +337,9 @@ CREATE OR REPLACE VIEW eom_hall_of_fame AS
 SELECT 
     ew.id,
     ew.eom_cycle_id,
-    ec.name as cycle_name,
-    ec.start_date as cycle_start,
-    ec.end_date as cycle_end,
+    c.name as cycle_name,
+    c.start_date as cycle_start,
+    c.end_date as cycle_end,
     ew.category,
     p.full_name as winner_name,
     p.email as winner_email,
@@ -338,18 +349,19 @@ SELECT
     en.nomination_reason,
     COUNT(DISTINCT ev.id) as total_votes,
     SUM(ev.vote_weight) as weighted_votes,
-    ew.created_at as won_at
+    COALESCE(ec.announcement_date, ew.announced_at) as won_at
 FROM eom_winners ew
 JOIN eom_cycles ec ON ew.eom_cycle_id = ec.id
+JOIN cycles c ON c.id = ec.cycle_id
 JOIN people p ON ew.winner_email = p.email
 LEFT JOIN eom_nominees en ON en.eom_cycle_id = ew.eom_cycle_id 
     AND en.nominee_email = ew.winner_email 
     AND en.category = ew.category
 LEFT JOIN eom_voters ev ON ev.eom_cycle_id = ew.eom_cycle_id
-GROUP BY ew.id, ew.eom_cycle_id, ec.name, ec.start_date, ec.end_date, 
+GROUP BY ew.id, ew.eom_cycle_id, c.name, c.start_date, c.end_date, 
     ew.category, p.full_name, p.email, p.department, p.role_title, 
-    p.segment, en.nomination_reason, ew.created_at
-ORDER BY ec.start_date DESC, ew.category;
+    p.segment, en.nomination_reason, ec.announcement_date, ew.announced_at
+ORDER BY c.start_date DESC, ew.category;
 
 COMMENT ON VIEW eom_hall_of_fame IS 'Complete history of EOM winners - the Hall of Fame';
 
