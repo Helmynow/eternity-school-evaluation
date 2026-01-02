@@ -136,7 +136,7 @@ def main(argv: list[str]) -> int:
             text(
                 """
                 insert into people (email, full_name, role_title, segment, active)
-                values (:email, :full_name, :role_title, :segment::staff_segment, true)
+                values (:email, :full_name, :role_title, cast(:segment as staff_segment), true)
                 on conflict (email) do update
                   set full_name = excluded.full_name,
                       role_title = excluded.role_title,
@@ -166,4 +166,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
