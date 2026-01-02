@@ -32,6 +32,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_survey_conditional_reveals_updated_at ON survey_conditional_reveals;
 CREATE TRIGGER update_survey_conditional_reveals_updated_at
     BEFORE UPDATE ON survey_conditional_reveals
     FOR EACH ROW
@@ -43,37 +44,45 @@ CREATE TRIGGER update_survey_conditional_reveals_updated_at
 ALTER TABLE survey_conditional_reveals ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own conditional reveals
+DROP POLICY IF EXISTS survey_conditional_reveals_select ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_select ON survey_conditional_reveals
     FOR SELECT
     USING ((select auth.email()) = user_email);
 
 -- Users can insert/update their own conditional reveals
+DROP POLICY IF EXISTS survey_conditional_reveals_insert ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_insert ON survey_conditional_reveals
     FOR INSERT
     WITH CHECK ((select auth.email()) = user_email);
 
+DROP POLICY IF EXISTS survey_conditional_reveals_update ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_update ON survey_conditional_reveals
     FOR UPDATE
     USING ((select auth.email()) = user_email);
 
+DROP POLICY IF EXISTS survey_conditional_reveals_delete ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_delete ON survey_conditional_reveals
     FOR DELETE
     USING ((select auth.email()) = user_email);
 
 -- Service role can do everything
+DROP POLICY IF EXISTS survey_conditional_reveals_service_role_select ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_service_role_select ON survey_conditional_reveals
     FOR SELECT
     USING ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_conditional_reveals_service_role_insert ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_service_role_insert ON survey_conditional_reveals
     FOR INSERT
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_conditional_reveals_service_role_update ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_service_role_update ON survey_conditional_reveals
     FOR UPDATE
     USING ((select auth.role()) = 'service_role')
     WITH CHECK ((select auth.role()) = 'service_role');
 
+DROP POLICY IF EXISTS survey_conditional_reveals_service_role_delete ON survey_conditional_reveals;
 CREATE POLICY survey_conditional_reveals_service_role_delete ON survey_conditional_reveals
     FOR DELETE
     USING ((select auth.role()) = 'service_role');
