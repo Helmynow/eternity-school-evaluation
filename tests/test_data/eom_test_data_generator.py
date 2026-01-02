@@ -168,7 +168,7 @@ class EOMTestDataGenerator:
                 'max_nominations_per_year': 2
             },
             {
-                'category': EOMCategory.LEADERSHIP,
+                'category': EOMCategory.TEAM_SPIRIT,
                 'cooldown_period': 6,  # 6 months cooldown
                 'max_wins_per_period': 1,
                 'period_type': 'year',

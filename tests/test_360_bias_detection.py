@@ -3,6 +3,7 @@ Tests for Complete 360-Degree Bias Detection System.
 """
 import pytest
 import numpy as np
+from dataclasses import asdict
 from itertools import cycle
 from unittest.mock import Mock, MagicMock
 from backend.bias_detection_360 import Complete360BiasDetection, BiasFinding, BiasReport
