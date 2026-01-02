@@ -106,6 +106,9 @@ CREATE POLICY "Users can update their own evaluations"
 -- EOM Cycles policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "EOM cycles are viewable by authenticated users" ON eom_cycles;
 DROP POLICY IF EXISTS "EOM cycles are modifiable by service role" ON eom_cycles;
+DROP POLICY IF EXISTS "EOM cycles are insertable by service role" ON eom_cycles;
+DROP POLICY IF EXISTS "EOM cycles are updatable by service role" ON eom_cycles;
+DROP POLICY IF EXISTS "EOM cycles are deletable by service role" ON eom_cycles;
 
 -- SELECT: authenticated users only (service_role bypasses RLS)
 CREATE POLICY "EOM cycles are viewable by authenticated users"
@@ -129,6 +132,9 @@ CREATE POLICY "EOM cycles are deletable by service role"
 -- EOM Voters policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Users can view EOM voters" ON eom_voters;
 DROP POLICY IF EXISTS "EOM voters are modifiable by service role" ON eom_voters;
+DROP POLICY IF EXISTS "EOM voters are insertable by service role" ON eom_voters;
+DROP POLICY IF EXISTS "EOM voters are updatable by service role" ON eom_voters;
+DROP POLICY IF EXISTS "EOM voters are deletable by service role" ON eom_voters;
 
 -- SELECT: authenticated users only
 CREATE POLICY "Users can view EOM voters"
@@ -172,6 +178,9 @@ CREATE POLICY "EOM nominees are updatable by service role"
 -- EOM Winners policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "EOM winners are viewable by authenticated users" ON eom_winners;
 DROP POLICY IF EXISTS "EOM winners are modifiable by service role" ON eom_winners;
+DROP POLICY IF EXISTS "EOM winners are insertable by service role" ON eom_winners;
+DROP POLICY IF EXISTS "EOM winners are updatable by service role" ON eom_winners;
+DROP POLICY IF EXISTS "EOM winners are deletable by service role" ON eom_winners;
 
 -- SELECT: authenticated users only
 CREATE POLICY "EOM winners are viewable by authenticated users"
@@ -195,6 +204,9 @@ CREATE POLICY "EOM winners are deletable by service role"
 -- EOM Rotation Rules policies - Separate SELECT from write operations
 DROP POLICY IF EXISTS "Rotation rules are viewable by authenticated users" ON eom_rotation_rules;
 DROP POLICY IF EXISTS "Rotation rules are modifiable by service role" ON eom_rotation_rules;
+DROP POLICY IF EXISTS "Rotation rules are insertable by service role" ON eom_rotation_rules;
+DROP POLICY IF EXISTS "Rotation rules are updatable by service role" ON eom_rotation_rules;
+DROP POLICY IF EXISTS "Rotation rules are deletable by service role" ON eom_rotation_rules;
 
 -- SELECT: authenticated users only
 CREATE POLICY "Rotation rules are viewable by authenticated users"
