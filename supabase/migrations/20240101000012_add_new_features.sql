@@ -194,15 +194,19 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_objections_updated_at ON objections;
 CREATE TRIGGER update_objections_updated_at BEFORE UPDATE ON objections
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_announcements_updated_at ON announcements;
 CREATE TRIGGER update_announcements_updated_at BEFORE UPDATE ON announcements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_surveys_updated_at ON surveys;
 CREATE TRIGGER update_surveys_updated_at BEFORE UPDATE ON surveys
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_feedback_updated_at ON feedback;
 CREATE TRIGGER update_feedback_updated_at BEFORE UPDATE ON feedback
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
