@@ -2,22 +2,25 @@
 Complete Survey Templates for Eternity School
 Comprehensive survey template system covering all aspects of school life.
 """
+
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-import logging
+
 from sqlalchemy.orm import Session
+
 from backend.hybrid_identity_system import HybridIdentityMode
 
 
 class EternitySchoolSurveyTemplates:
     """Complete survey templates covering all aspects of school life"""
-    
+
     def __init__(self, db_session: Session):
         self.db = db_session
         self.logger = logging.getLogger(__name__)
         self.template_categories = self.load_template_categories()
         self.question_bank = self.load_question_bank()
-    
+
     def load_template_categories(self) -> Dict:
         """Load template categories"""
         return {
@@ -29,26 +32,22 @@ class EternitySchoolSurveyTemplates:
             "school_improvement": "School Improvement & Innovation",
             "sensitive_topics": "Sensitive Topics (Anonymous Only)",
             "accountability": "Accountability & Action Items (Identified Only)",
-            "future_engagement": "Future Engagement (Conditional Only)"
+            "future_engagement": "Future Engagement (Conditional Only)",
         }
-    
+
     def load_question_bank(self) -> Dict:
         """Load question bank from database or configuration"""
         # In production, load from database
         return {}
-    
-    def get_comprehensive_school_survey(
-        self,
-        identity_mode: str,
-        survey_type: str = "comprehensive"
-    ) -> Dict:
+
+    def get_comprehensive_school_survey(self, identity_mode: str, survey_type: str = "comprehensive") -> Dict:
         """
         Get complete school climate survey based on identity mode.
-        
+
         Args:
             identity_mode: Identity mode (anonymous, conditional, partial, identified)
             survey_type: Survey type (comprehensive, climate, feedback, etc.)
-        
+
         Returns:
             Complete survey template with all sections
         """
@@ -58,9 +57,9 @@ class EternitySchoolSurveyTemplates:
             "management_effectiveness": self.get_management_section(identity_mode),
             "inter_departmental": self.get_interdepartmental_section(identity_mode),
             "personal_wellbeing": self.get_personal_wellbeing_section(identity_mode),
-            "school_improvement": self.get_improvement_section(identity_mode)
+            "school_improvement": self.get_improvement_section(identity_mode),
         }
-        
+
         # Add identity-specific sections
         if identity_mode == "anonymous":
             base_sections["sensitive_topics"] = self.get_sensitive_topics_section()
@@ -68,7 +67,7 @@ class EternitySchoolSurveyTemplates:
             base_sections["accountability"] = self.get_accountability_section()
         elif identity_mode == "conditional":
             base_sections["future_engagement"] = self.get_future_engagement_section()
-        
+
         return {
             "survey_id": f"eternity_comprehensive_{datetime.utcnow().strftime('%Y%m%d')}",
             "title": "Eternity School Complete Climate Survey",
@@ -77,9 +76,9 @@ class EternitySchoolSurveyTemplates:
             "identity_mode": identity_mode,
             "sections": base_sections,
             "total_questions": sum(len(section.get("questions", [])) for section in base_sections.values()),
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
-    
+
     def get_physical_environment_section(self, identity_mode: str) -> Dict:
         """Physical environment and facilities feedback"""
         return {
@@ -95,7 +94,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "cafeteria",
                     "follow_up": "What specific improvements would you suggest?",
                     "conditional_show": identity_mode != "anonymous",
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "classroom_001",
@@ -104,7 +103,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "classrooms",
                     "details_prompt": "Please specify what technology is missing or inadequate",
                     "sensitivity": "low",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "facilities_001",
@@ -113,7 +112,7 @@ class EternitySchoolSurveyTemplates:
                     "sub_items": ["Restrooms", "Hallways", "Common Areas", "Outdoor Spaces"],
                     "scale": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
                     "category": "facilities",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "parking_001",
@@ -121,7 +120,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_with_comments",
                     "category": "parking",
                     "show_if": identity_mode in ["identified", "conditional", "partial"],
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "safety_001",
@@ -129,11 +128,11 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Unsafe", "Unsafe", "Neutral", "Safe", "Very Safe"],
                     "category": "safety",
-                    "required": True
-                }
-            ]
+                    "required": True,
+                },
+            ],
         }
-    
+
     def get_workplace_culture_section(self, identity_mode: str) -> Dict:
         """Workplace culture and fairness feedback"""
         return {
@@ -149,7 +148,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "fairness",
                     "sensitivity": "high" if identity_mode == "identified" else "medium",
                     "anonymous_only": identity_mode == "anonymous",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "recognition_001",
@@ -158,7 +157,7 @@ class EternitySchoolSurveyTemplates:
                     "scale": ["Never", "Rarely", "Sometimes", "Often", "Always"],
                     "category": "recognition",
                     "follow_up": "Can you share a recent example (good or bad)?",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "inclusion_001",
@@ -167,7 +166,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "inclusion",
                     "details_prompt": "Please share specific experiences that shaped your answer",
                     "sensitivity": "high",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "communication_001",
@@ -176,7 +175,7 @@ class EternitySchoolSurveyTemplates:
                     "aspects": ["Clarity", "Frequency", "Transparency", "Two-way communication"],
                     "scale": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
                     "category": "communication",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "collaboration_001",
@@ -184,11 +183,11 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Poorly", "Poorly", "Adequately", "Well", "Very Well"],
                     "category": "collaboration",
-                    "required": True
-                }
-            ]
+                    "required": True,
+                },
+            ],
         }
-    
+
     def get_management_section(self, identity_mode: str) -> Dict:
         """Management and leadership effectiveness"""
         return {
@@ -204,7 +203,7 @@ class EternitySchoolSurveyTemplates:
                     "scale": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
                     "category": "direct_management",
                     "manager_specific": True,
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "hod_001",
@@ -213,7 +212,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "department_leadership",
                     "examples_prompt": "Can you provide specific examples of their leadership?",
                     "show_if": identity_mode != "anonymous",
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "principal_001",
@@ -221,7 +220,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Poorly", "Poorly", "Adequately", "Well", "Very Well"],
                     "category": "school_leadership",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "hr_001",
@@ -230,19 +229,25 @@ class EternitySchoolSurveyTemplates:
                     "aspects": ["Response Time", "Helpfulness", "Problem Resolution", "Policy Clarity"],
                     "category": "hr_effectiveness",
                     "show_if": identity_mode != "anonymous",
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "decision_making_001",
                     "text": "How transparent and inclusive is the decision-making process?",
                     "type": "rating_scale",
-                    "scale": ["Not Transparent", "Somewhat Transparent", "Moderately Transparent", "Transparent", "Very Transparent"],
+                    "scale": [
+                        "Not Transparent",
+                        "Somewhat Transparent",
+                        "Moderately Transparent",
+                        "Transparent",
+                        "Very Transparent",
+                    ],
                     "category": "transparency",
-                    "required": True
-                }
-            ]
+                    "required": True,
+                },
+            ],
         }
-    
+
     def get_interdepartmental_section(self, identity_mode: str) -> Dict:
         """Inter-departmental collaboration"""
         return {
@@ -256,7 +261,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Ineffective", "Ineffective", "Neutral", "Effective", "Very Effective"],
                     "category": "collaboration",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "communication_dept_001",
@@ -264,7 +269,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "multi_rating",
                     "aspects": ["Frequency", "Clarity", "Timeliness", "Relevance"],
                     "category": "communication",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "conflict_resolution_001",
@@ -272,11 +277,11 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Poorly", "Poorly", "Adequately", "Well", "Very Well"],
                     "category": "conflict_resolution",
-                    "required": True
-                }
-            ]
+                    "required": True,
+                },
+            ],
         }
-    
+
     def get_personal_wellbeing_section(self, identity_mode: str) -> Dict:
         """Personal wellbeing and support"""
         return {
@@ -290,7 +295,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Unmanageable", "Difficult", "Manageable", "Comfortable", "Very Comfortable"],
                     "category": "workload",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "support_001",
@@ -298,7 +303,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "yes_no_details",
                     "category": "support",
                     "details_prompt": "What support do you need that you're not receiving?",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "work_life_balance_001",
@@ -306,7 +311,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Very Poor", "Poor", "Average", "Good", "Excellent"],
                     "category": "work_life_balance",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "stress_001",
@@ -315,11 +320,11 @@ class EternitySchoolSurveyTemplates:
                     "scale": ["Very Low", "Low", "Moderate", "High", "Very High"],
                     "category": "stress",
                     "sensitivity": "medium",
-                    "required": True
-                }
-            ]
+                    "required": True,
+                },
+            ],
         }
-    
+
     def get_improvement_section(self, identity_mode: str) -> Dict:
         """School improvement and innovation"""
         return {
@@ -333,7 +338,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "rating_scale",
                     "scale": ["Not Open", "Somewhat Open", "Moderately Open", "Open", "Very Open"],
                     "category": "innovation",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "improvement_001",
@@ -348,21 +353,21 @@ class EternitySchoolSurveyTemplates:
                         "Management",
                         "Facilities",
                         "Technology",
-                        "Other"
+                        "Other",
                     ],
                     "category": "improvement",
-                    "required": True
+                    "required": True,
                 },
                 {
                     "id": "suggestions_001",
                     "text": "What specific improvements would you like to see?",
                     "type": "open_text",
                     "category": "suggestions",
-                    "required": False
-                }
-            ]
+                    "required": False,
+                },
+            ],
         }
-    
+
     def get_sensitive_topics_section(self) -> Dict:
         """Sensitive topics section (anonymous only)"""
         return {
@@ -378,7 +383,7 @@ class EternitySchoolSurveyTemplates:
                     "details_prompt": "Please describe the incident(s) if comfortable",
                     "sensitivity": "very_high",
                     "anonymous_only": True,
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "harassment_001",
@@ -387,7 +392,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "harassment",
                     "sensitivity": "very_high",
                     "anonymous_only": True,
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "retaliation_001",
@@ -396,11 +401,11 @@ class EternitySchoolSurveyTemplates:
                     "category": "retaliation",
                     "sensitivity": "very_high",
                     "anonymous_only": True,
-                    "required": False
-                }
-            ]
+                    "required": False,
+                },
+            ],
         }
-    
+
     def get_accountability_section(self) -> Dict:
         """Accountability section (identified only)"""
         return {
@@ -415,7 +420,7 @@ class EternitySchoolSurveyTemplates:
                     "category": "actions",
                     "identified_only": True,
                     "follow_up_enabled": True,
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "accountability_001",
@@ -423,11 +428,11 @@ class EternitySchoolSurveyTemplates:
                     "type": "yes_no",
                     "category": "accountability",
                     "identified_only": True,
-                    "required": False
-                }
-            ]
+                    "required": False,
+                },
+            ],
         }
-    
+
     def get_future_engagement_section(self) -> Dict:
         """Future engagement section (conditional only)"""
         return {
@@ -441,7 +446,7 @@ class EternitySchoolSurveyTemplates:
                     "type": "conditional",
                     "category": "future_feedback",
                     "reveal_trigger": "if_discussion_needed",
-                    "required": False
+                    "required": False,
                 },
                 {
                     "id": "follow_up_001",
@@ -449,11 +454,11 @@ class EternitySchoolSurveyTemplates:
                     "type": "multiple_choice",
                     "options": ["Email", "Phone", "In-person meeting", "No follow-up"],
                     "category": "contact_preference",
-                    "required": False
-                }
-            ]
+                    "required": False,
+                },
+            ],
         }
-    
+
     def get_template_by_category(self, category: str, identity_mode: str) -> Dict:
         """Get template for specific category"""
         templates = {
@@ -462,9 +467,9 @@ class EternitySchoolSurveyTemplates:
             "management": self.get_management_section,
             "inter_departmental": self.get_interdepartmental_section,
             "personal_wellbeing": self.get_personal_wellbeing_section,
-            "school_improvement": self.get_improvement_section
+            "school_improvement": self.get_improvement_section,
         }
-        
+
         template_func = templates.get(category)
         if template_func:
             return template_func(identity_mode)

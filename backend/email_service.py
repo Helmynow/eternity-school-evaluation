@@ -2,51 +2,48 @@
 Email notification service for Eternity School Evaluation System.
 Sends emails to winners, voters, evaluators, and other stakeholders.
 """
-import smtplib
+
 import os
-from email.mime.text import MIMEText
+import smtplib
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import List, Optional
+
 from jinja2 import Template
+
 
 class EmailService:
     """Service for sending email notifications"""
-    
+
     def __init__(self):
         # Resend SMTP Configuration
-        self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.resend.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '465'))
-        self.smtp_user = os.getenv('SMTP_USER', 'resend')
-        self.smtp_password = os.getenv('SMTP_PASSWORD', 're_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2')
-        self.from_email = os.getenv('FROM_EMAIL', 'noreply@eternityschoolegypt.com')
-        self.enabled = os.getenv('EMAIL_ENABLED', 'true').lower() == 'true'
-    
-    def send_email(
-        self,
-        to_email: str,
-        subject: str,
-        html_body: str,
-        text_body: Optional[str] = None
-    ) -> bool:
+        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.resend.com")
+        self.smtp_port = int(os.getenv("SMTP_PORT", "465"))
+        self.smtp_user = os.getenv("SMTP_USER", "resend")
+        self.smtp_password = os.getenv("SMTP_PASSWORD", "re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2")
+        self.from_email = os.getenv("FROM_EMAIL", "noreply@eternityschoolegypt.com")
+        self.enabled = os.getenv("EMAIL_ENABLED", "true").lower() == "true"
+
+    def send_email(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
         """Send an email"""
         if not self.enabled:
             print(f"[EMAIL DISABLED] Would send to {to_email}: {subject}")
             return True
-        
+
         if not self.smtp_user or not self.smtp_password:
             print(f"[EMAIL NOT CONFIGURED] Cannot send email to {to_email}")
             return False
-        
+
         try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = self.from_email
+            msg["To"] = to_email
+
             if text_body:
-                msg.attach(MIMEText(text_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
-            
+                msg.attach(MIMEText(text_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
+
             # Use SSL for port 465, TLS for port 587
             if self.smtp_port == 465:
                 with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
@@ -57,22 +54,16 @@ class EmailService:
                     server.starttls()
                     server.login(self.smtp_user, self.smtp_password)
                     server.send_message(msg)
-            
+
             return True
         except Exception as e:
             print(f"Failed to send email to {to_email}: {str(e)}")
             return False
-    
-    def send_winner_notification(
-        self,
-        winner_email: str,
-        winner_name: str,
-        category: str,
-        cycle_name: str
-    ) -> bool:
+
+    def send_winner_notification(self, winner_email: str, winner_name: str, category: str, cycle_name: str) -> bool:
         """Send notification to EOM winner"""
         subject = f"🎉 Congratulations! You are the Employee of the Month - {category}"
-        
+
         html_body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -90,19 +81,15 @@ class EmailService:
         </body>
         </html>
         """
-        
+
         return self.send_email(winner_email, subject, html_body)
-    
+
     def send_voter_notification(
-        self,
-        voter_email: str,
-        voter_name: str,
-        cycle_name: str,
-        voting_deadline: Optional[str] = None
+        self, voter_email: str, voter_name: str, cycle_name: str, voting_deadline: Optional[str] = None
     ) -> bool:
         """Send notification to voters"""
         subject = f"🗳️ EOM Voting Open - {cycle_name}"
-        
+
         html_body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -121,20 +108,15 @@ class EmailService:
         </body>
         </html>
         """
-        
+
         return self.send_email(voter_email, subject, html_body)
-    
+
     def send_evaluator_notification(
-        self,
-        evaluator_email: str,
-        evaluator_name: str,
-        target_name: str,
-        cycle_name: str,
-        deadline: Optional[str] = None
+        self, evaluator_email: str, evaluator_name: str, target_name: str, cycle_name: str, deadline: Optional[str] = None
     ) -> bool:
         """Send notification to evaluators"""
         subject = f"📝 Evaluation Reminder - {cycle_name}"
-        
+
         html_body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -152,20 +134,15 @@ class EmailService:
         </body>
         </html>
         """
-        
+
         return self.send_email(evaluator_email, subject, html_body)
-    
+
     def send_objection_notification(
-        self,
-        admin_email: str,
-        objector_name: str,
-        nominee_name: str,
-        reason: str,
-        cycle_name: str
+        self, admin_email: str, objector_name: str, nominee_name: str, reason: str, cycle_name: str
     ) -> bool:
         """Send notification about an objection"""
         subject = f"⚠️ Objection Submitted - EOM Nomination"
-        
+
         html_body = f"""
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -187,5 +164,5 @@ class EmailService:
         </body>
         </html>
         """
-        
+
         return self.send_email(admin_email, subject, html_body)

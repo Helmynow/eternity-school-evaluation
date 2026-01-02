@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures for all tests.
 """
+
 import os
 import sys
 from pathlib import Path
@@ -20,17 +21,15 @@ os.environ.setdefault("SENTRY_DSN", "")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("EMAIL_ENABLED", "false")
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 
 @pytest.fixture(scope="session")
 def test_database_url():
     """Get test database URL from environment or use default"""
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/eternity_school_test"
-    )
+    return os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/eternity_school_test")
 
 
 @pytest.fixture
