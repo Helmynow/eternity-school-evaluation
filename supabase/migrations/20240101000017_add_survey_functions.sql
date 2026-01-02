@@ -446,6 +446,25 @@ $$ LANGUAGE plpgsql;
 -- INDEXES FOR PERFORMANCE
 -- ============================================================================
 
+-- Ensure survey_responses.created_at exists (older schema uses submitted_at only)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'survey_responses'
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'survey_responses'
+          AND column_name = 'created_at'
+    ) THEN
+        ALTER TABLE survey_responses
+            ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    END IF;
+END $$;
+
 -- Index for cleanup queries
 CREATE INDEX IF NOT EXISTS idx_survey_response_anonymous_created 
     ON survey_responses(identity_mode, anonymous_id, created_at)
