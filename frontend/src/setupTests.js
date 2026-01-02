@@ -29,8 +29,18 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+// Polyfill ResizeObserver for chart libraries (e.g., recharts) in jsdom
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 // Mock react-hot-toast
 jest.mock('react-hot-toast', () => ({
+  __esModule: true,
   default: {
     success: jest.fn(),
     error: jest.fn(),

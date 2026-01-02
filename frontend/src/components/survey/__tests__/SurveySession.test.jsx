@@ -6,12 +6,30 @@ import { useAuth } from '../../../hooks/useAuth'
 import toast from 'react-hot-toast'
 
 // Mock dependencies
-jest.mock('../../../lib/api')
+jest.mock('../../../lib/api', () => ({
+  apiClient: {
+    survey: {
+      getById: jest.fn(),
+      getQuestions: jest.fn(),
+      submitResponse: jest.fn(),
+    },
+    surveyIdentity: {
+      setPreference: jest.fn(),
+    },
+    hybridIdentity: {
+      initializeSession: jest.fn(),
+      createSurveySession: jest.fn(),
+      submitResponse: jest.fn(),
+    },
+  },
+}))
 jest.mock('../../../hooks/useAuth')
 jest.mock('react-hot-toast', () => ({
+  __esModule: true,
   default: {
     success: jest.fn(),
     error: jest.fn(),
+    loading: jest.fn(),
   },
 }))
 
@@ -119,7 +137,9 @@ describe('SurveySession', () => {
       renderWithRouter(<SurveySession />)
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Failed to load survey')
+        expect(toast.error).toHaveBeenCalledWith(
+          'Survey not found. It may have been deleted or you may not have access.'
+        )
       })
     })
   })
@@ -298,9 +318,14 @@ describe('SurveySession', () => {
       const textarea = screen.getByPlaceholderText('Enter your response...')
       fireEvent.change(textarea, { target: { value: 'Test response' } })
 
-      // Submit
-      const submitButton = screen.getByText('Submit Survey')
-      fireEvent.click(submitButton)
+      // Move to last question then submit (SurveyForm shows submit only on last question)
+      fireEvent.click(screen.getByText('Next'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Question 2')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Submit Survey'))
 
       await waitFor(() => {
         expect(apiClient.hybridIdentity.submitResponse).toHaveBeenCalled()
@@ -331,8 +356,13 @@ describe('SurveySession', () => {
       const textarea = screen.getByPlaceholderText('Enter your response...')
       fireEvent.change(textarea, { target: { value: 'Test response' } })
 
-      const submitButton = screen.getByText('Submit Survey')
-      fireEvent.click(submitButton)
+      fireEvent.click(screen.getByText('Next'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Question 2')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Submit Survey'))
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalled()
@@ -356,8 +386,13 @@ describe('SurveySession', () => {
       const textarea = screen.getByPlaceholderText('Enter your response...')
       fireEvent.change(textarea, { target: { value: 'Test response' } })
 
-      const submitButton = screen.getByText('Submit Survey')
-      fireEvent.click(submitButton)
+      fireEvent.click(screen.getByText('Next'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Question 2')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Submit Survey'))
 
       await waitFor(() => {
         expect(localStorageMock.removeItem).toHaveBeenCalledWith('survey_session_token')

@@ -205,6 +205,7 @@ const SurveySession = () => {
   if (loading && !survey) {
     return (
       <div className="p-6">
+        <span className="sr-only">Loading...</span>
         <LoadingSkeleton type="form" count={5} />
       </div>
     )

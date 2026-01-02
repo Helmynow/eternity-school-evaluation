@@ -303,10 +303,10 @@ const Reports = () => {
         </h2>
         
         {/* Tab Navigation */}
-        <div className="flex space-x-2 mb-6 border-b border-ese-accent-beige">
+        <div className="flex space-x-2 mb-6 border-b border-ese-accent-beige overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab('export')}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`shrink-0 px-4 py-2 font-medium transition-colors ${
               activeTab === 'export'
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-blue hover:text-ese-lang-900'
@@ -316,7 +316,7 @@ const Reports = () => {
           </button>
           <button
             onClick={() => setActiveTab('eom')}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`shrink-0 px-4 py-2 font-medium transition-colors ${
               activeTab === 'eom'
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-blue hover:text-ese-lang-900'
@@ -326,7 +326,7 @@ const Reports = () => {
           </button>
           <button
             onClick={() => setActiveTab('evaluations')}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`shrink-0 px-4 py-2 font-medium transition-colors ${
               activeTab === 'evaluations'
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-blue hover:text-ese-lang-900'
@@ -336,7 +336,7 @@ const Reports = () => {
           </button>
           <button
             onClick={() => setActiveTab('surveys')}
-            className={`px-4 py-2 font-medium transition-colors ${
+            className={`shrink-0 px-4 py-2 font-medium transition-colors ${
               activeTab === 'surveys'
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-blue hover:text-ese-lang-900'

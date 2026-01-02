@@ -1,7 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { supabase } from '../../lib/supabase'
 import AnnouncementBanner from '../common/AnnouncementBanner'
 // Logo path - public assets are served at root
 const logoPath = '/assets/media/logo-no-bound.png'
@@ -10,27 +9,56 @@ const Layout = ({ children }) => {
   const { user, role, signOut, isCEO, isPNC, isDepartmentHead } = useAuth()
   const location = useLocation()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [activeNavGroup, setActiveNavGroup] = useState(() => {
+    if (location.pathname.startsWith('/admin')) return 'admin'
+    if (location.pathname.startsWith('/eom')) return 'eom'
+    if (
+      location.pathname.startsWith('/reports') ||
+      location.pathname.startsWith('/history') ||
+      location.pathname.startsWith('/notifications')
+    ) {
+      return 'tools'
+    }
+    return 'main'
+  })
 
   const handleSignOut = async () => {
     await signOut()
     window.location.href = '/'
   }
 
-  const navItems = [
-    { 
-      path: '/', 
-      label: 'Dashboard', 
-      icon: '/assets/icons/dashboard.png', 
+  const canAccessItem = (item) => {
+    if (item.roles.includes('all')) return true
+    if (isCEO) return true
+    if (isPNC && item.roles.includes('pnc')) return true
+    if (isDepartmentHead && item.roles.includes('department_head')) return true
+    if (item.roles.includes('staff')) return true
+    return false
+  }
+
+  const filterItemsByRole = (items) => items.filter(canAccessItem)
+
+  const mainNavItems = [
+    {
+      path: '/',
+      label: 'Dashboard',
+      icon: '/assets/icons/dashboard.png',
       roles: ['ceo', 'pnc', 'department_head', 'staff'],
-      isDashboard: true
+      isDashboard: true,
     },
-    { 
-      path: '/survey', 
-      label: 'Survey', 
-      icon: '/assets/icons/assessment.png', 
-      roles: ['ceo', 'pnc', 'department_head', 'staff']
+    {
+      path: '/survey',
+      label: 'Survey',
+      icon: '/assets/icons/assessment.png',
+      roles: ['ceo', 'pnc', 'department_head', 'staff'],
     },
-    ]
+    {
+      path: '/mre/evaluate',
+      label: 'MRE Evaluate',
+      icon: '/assets/icons/assessment.png',
+      roles: ['ceo', 'pnc', 'department_head', 'staff'],
+    },
+  ]
 
   const adminNavItems = [
     { 
@@ -83,6 +111,21 @@ const Layout = ({ children }) => {
     },
   ]
 
+  const eomNavItems = [
+    {
+      path: '/eom/nominate',
+      label: 'EOM Nominate',
+      icon: '/assets/icons/announcments.png',
+      roles: ['ceo', 'pnc', 'department_head'],
+    },
+    {
+      path: '/eom/vote',
+      label: 'EOM Vote',
+      icon: '/assets/icons/vote.png',
+      roles: ['ceo', 'pnc', 'department_head'],
+    },
+  ]
+
   const utilityNavItems = [
     { 
       path: '/reports', 
@@ -103,39 +146,59 @@ const Layout = ({ children }) => {
       roles: ['ceo', 'pnc', 'department_head', 'staff'] 
     },
   ]
+  const navGroups = [
+    {
+      id: 'main',
+      label: 'Main',
+      icon: '/assets/icons/dashboard.png',
+      items: filterItemsByRole(mainNavItems),
+    },
+    {
+      id: 'eom',
+      label: 'EOM',
+      icon: '/assets/icons/announcments.png',
+      items: filterItemsByRole(eomNavItems),
+    },
+    {
+      id: 'tools',
+      label: 'Tools',
+      icon: '/assets/icons/Analytics.png',
+      items: filterItemsByRole(utilityNavItems),
+    },
+    {
+      id: 'admin',
+      label: 'Admin',
+      icon: '/assets/icons/change.png',
+      items: filterItemsByRole(adminNavItems),
+    },
+  ].filter((g) => g.items.length > 0)
 
-  const allNavItems = [
-    ...navItems,
-    { 
-      path: '/eom/nominate', 
-      label: 'EOM Nominate', 
-      icon: '/assets/icons/announcments.png', 
-      roles: ['ceo', 'pnc', 'department_head'] 
-    },
-    { 
-      path: '/eom/vote', 
-      label: 'EOM Vote', 
-      icon: '/assets/icons/vote.png', 
-      roles: ['ceo', 'pnc', 'department_head'] 
-    },
-    { 
-      path: '/mre/evaluate', 
-      label: 'MRE Evaluate', 
-      icon: '/assets/icons/assessment.png', 
-      roles: ['ceo', 'pnc', 'department_head', 'staff'] 
-    },
-    ...utilityNavItems,
-    ...adminNavItems,
-  ]
+  const inferredGroup = (() => {
+    if (location.pathname.startsWith('/admin')) return 'admin'
+    if (location.pathname.startsWith('/eom')) return 'eom'
+    if (
+      location.pathname.startsWith('/reports') ||
+      location.pathname.startsWith('/history') ||
+      location.pathname.startsWith('/notifications')
+    ) {
+      return 'tools'
+    }
+    return 'main'
+  })()
 
-  const filteredNavItems = allNavItems.filter(item => {
-    if (item.roles.includes('all')) return true
-    if (isCEO) return true
-    if (isPNC && item.roles.includes('pnc')) return true
-    if (isDepartmentHead && item.roles.includes('department_head')) return true
-    if (item.roles.includes('staff')) return true
-    return false
-  })
+  const safeActiveGroup = navGroups.some((g) => g.id === inferredGroup)
+    ? inferredGroup
+    : navGroups[0]?.id || 'main'
+
+  // Keep the UI group selector in sync with the current route when possible
+  useEffect(() => {
+    setActiveNavGroup(safeActiveGroup)
+  }, [safeActiveGroup])
+
+  const activeGroupItems =
+    navGroups.find((g) => g.id === activeNavGroup)?.items ||
+    navGroups.find((g) => g.id === safeActiveGroup)?.items ||
+    []
 
   return (
     <div className="min-h-screen bg-ese-ink-white flex flex-col">
@@ -202,37 +265,72 @@ const Layout = ({ children }) => {
 
       {/* Navigation Bar - Card Style */}
       <nav className="ese-nav-card-band">
-        <div className="ese-nav-card-container">
-          {filteredNavItems.map((item) => {
-            const isActive = location.pathname === item.path
-            const activeClass = isActive 
-              ? (item.isDashboard ? 'ese-nav-card--active-dashboard' : 'ese-nav-card--active')
-              : ''
-            
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`ese-nav-card ${activeClass}`}
-              >
-                <div className="ese-nav-card__icon">
-                  <div className="ese-nav-card__icon-graphic">
-                    <img 
-                      src={item.icon} 
-                      alt={item.label}
-                      className="ese-nav-card__icon-img"
+        <div className="w-full max-w-7xl mx-auto flex flex-col gap-3">
+          {/* Group selector (reduces crowding when many nav items exist) */}
+          {navGroups.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {navGroups.map((group) => {
+                const isSelected = group.id === activeNavGroup
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => setActiveNavGroup(group.id)}
+                    className={`shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      isSelected
+                        ? 'bg-ese-accent-mustard text-ese-ink-navy'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }`}
+                  >
+                    <img
+                      src={group.icon}
+                      alt=""
+                      className="w-4 h-4"
                       onError={(e) => {
-                        // Fallback if icon doesn't load
                         e.target.style.display = 'none'
-                        e.target.parentElement.innerHTML = `<span style="font-size: 1.5rem;">${item.label.charAt(0)}</span>`
                       }}
                     />
+                    <span>{group.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="ese-nav-card-container">
+            {activeGroupItems.map((item) => {
+              const isActive =
+                location.pathname === item.path ||
+                (item.path !== '/' && location.pathname.startsWith(item.path))
+              const activeClass = isActive
+                ? item.isDashboard
+                  ? 'ese-nav-card--active-dashboard'
+                  : 'ese-nav-card--active'
+                : ''
+
+              return (
+                <Link key={item.path} to={item.path} className={`ese-nav-card ${activeClass}`}>
+                  <div className="ese-nav-card__icon">
+                    <div className="ese-nav-card__icon-graphic">
+                      <img
+                        src={item.icon}
+                        alt={item.label}
+                        className="ese-nav-card__icon-img"
+                        onError={(e) => {
+                          // Fallback if icon doesn't load
+                          e.target.style.display = 'none'
+                          e.target.parentElement.innerHTML = `<span style="font-size: 1.5rem;">${item.label.charAt(
+                            0
+                          )}</span>`
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-                <span className="ese-nav-card__label">{item.label}</span>
-              </Link>
-            )
-          })}
+                  <span className="ese-nav-card__label">{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </nav>
 

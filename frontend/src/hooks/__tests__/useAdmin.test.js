@@ -167,13 +167,17 @@ describe('useAdmin', () => {
       const fetchPromise = result.current.fetchDashboard('admin@example.com')
 
       // Loading should be true during fetch
-      expect(result.current.loading).toBe(true)
+      await waitFor(() => {
+        expect(result.current.loading).toBe(true)
+      })
 
       resolvePromise({ data: {} })
       await fetchPromise
 
       // Loading should be false after fetch
-      expect(result.current.loading).toBe(false)
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false)
+      })
     })
 
     it('should reset loading state on error', async () => {
@@ -189,7 +193,9 @@ describe('useAdmin', () => {
       }
 
       // Loading should be false after error
-      expect(result.current.loading).toBe(false)
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false)
+      })
     })
   })
 

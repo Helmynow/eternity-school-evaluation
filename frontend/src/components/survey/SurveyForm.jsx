@@ -139,6 +139,7 @@ const SurveyForm = ({ survey, questions, identityMode, onSubmit, onBack, loading
     return (
       <ErrorBoundary>
         <div className="space-y-6">
+          <span className="sr-only">Loading...</span>
           <LoadingSkeleton type="form" count={3} />
         </div>
       </ErrorBoundary>
@@ -157,6 +158,9 @@ const SurveyForm = ({ survey, questions, identityMode, onSubmit, onBack, loading
           ← Back to mode selection
         </button>
         <h1 className="text-3xl font-bold text-ese-ink-navy mb-2">{survey.title}</h1>
+        {survey.description && (
+          <p className="text-ese-ink-medium mb-2">{survey.description}</p>
+        )}
         <div className="flex items-center space-x-4 text-sm text-ese-ink-medium">
           <span>Mode: {identityMode}</span>
           <span>•</span>
@@ -167,7 +171,14 @@ const SurveyForm = ({ survey, questions, identityMode, onSubmit, onBack, loading
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full bg-ese-ink-light rounded-full h-2">
+      <div
+        className="w-full bg-ese-ink-light rounded-full h-2"
+        role="progressbar"
+        aria-label="Survey progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress)}
+      >
         <div
           className="bg-ese-lang-900 h-2 rounded-full transition-all"
           style={{ width: `${progress}%` }}

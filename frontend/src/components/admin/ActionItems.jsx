@@ -4,15 +4,24 @@ import { useAuth } from '../../hooks/useAuth'
 import toast from 'react-hot-toast'
 import ErrorBoundary from '../common/ErrorBoundary'
 import LoadingSkeleton from '../common/LoadingSkeleton'
+import PropTypes from 'prop-types'
 
-const ActionItems = () => {
+const ActionItems = ({ items }) => {
   const { user } = useAuth()
-  const [actionItems, setActionItems] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [actionItems, setActionItems] = useState(() => (Array.isArray(items) ? items : []))
+  const [loading, setLoading] = useState(() => !Array.isArray(items))
 
   useEffect(() => {
+    // If items are provided (e.g., already fetched by parent), use them and skip refetch.
+    if (Array.isArray(items)) {
+      setActionItems(items)
+      setLoading(false)
+      return
+    }
+
     loadActionItems()
-  }, [user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, items])
 
   const loadActionItems = async () => {
     setLoading(true)
@@ -157,6 +166,14 @@ const ActionItems = () => {
       </div>
     </ErrorBoundary>
   )
+}
+
+ActionItems.propTypes = {
+  items: PropTypes.array,
+}
+
+ActionItems.defaultProps = {
+  items: undefined,
 }
 
 export default ActionItems

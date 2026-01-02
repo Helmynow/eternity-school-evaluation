@@ -7,10 +7,16 @@ import toast from 'react-hot-toast'
 
 jest.mock('../../../hooks/useAuth')
 jest.mock('../../../hooks/useAdmin')
+jest.mock('../BiasAlerts', () => ({
+  __esModule: true,
+  default: () => <div>Bias Alerts Component</div>,
+}))
 jest.mock('react-hot-toast', () => ({
+  __esModule: true,
   default: {
     success: jest.fn(),
     error: jest.fn(),
+    loading: jest.fn(),
   },
 }))
 
@@ -34,11 +40,11 @@ describe('AdminDashboard', () => {
     ],
   }
 
-  const mockOverviewCards = {
-    surveys: { count: 10, trend: 'up', change: 2 },
-    responses: { count: 100, trend: 'up', change: 15 },
-    users: { count: 50, trend: 'stable', change: 0 },
-  }
+  const mockOverviewCards = [
+    { title: 'Surveys', value: 10, change: 2 },
+    { title: 'Responses', value: 100, change: 15 },
+    { title: 'Users', value: 50, change: 0 },
+  ]
 
   const mockRealTimeMetrics = {
     active_users: 25,
@@ -227,7 +233,7 @@ describe('AdminDashboard', () => {
       fireEvent.click(biasTab)
 
       await waitFor(() => {
-        expect(screen.getByText(/bias/i)).toBeInTheDocument()
+        expect(screen.getByText('Bias Alerts Component')).toBeInTheDocument()
       })
     })
 
@@ -270,9 +276,9 @@ describe('AdminDashboard', () => {
     it('should show trends for each card', () => {
       renderWithRouter(<AdminDashboard />)
 
-      // Should show trend indicators
-      expect(screen.getByText(/up/i)).toBeInTheDocument()
-      expect(screen.getByText(/stable/i)).toBeInTheDocument()
+      // Should show change text for cards with change data
+      expect(screen.getByText('+2% from last period')).toBeInTheDocument()
+      expect(screen.getByText('+15% from last period')).toBeInTheDocument()
     })
   })
 
@@ -348,7 +354,7 @@ describe('AdminDashboard', () => {
       fireEvent.click(biasTab)
 
       await waitFor(() => {
-        expect(screen.getByText(/bias/i)).toBeInTheDocument()
+        expect(screen.getByText('Bias Alerts Component')).toBeInTheDocument()
       })
     })
 

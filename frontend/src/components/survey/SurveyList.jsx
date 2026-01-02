@@ -84,12 +84,12 @@ const SurveyList = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex space-x-2 border-b border-ese-ink-light">
+      <div className="flex space-x-2 border-b border-ese-ink-light overflow-x-auto whitespace-nowrap">
         {['all', 'active', 'draft', 'closed'].map((status) => (
           <button
             key={status}
             onClick={() => setFilter(status)}
-            className={`px-4 py-2 font-medium capitalize transition-colors ${
+            className={`shrink-0 px-4 py-2 font-medium capitalize transition-colors ${
               filter === status
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-medium hover:text-ese-lang-900'

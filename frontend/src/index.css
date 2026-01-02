@@ -70,11 +70,37 @@
 
 .ese-nav-card-container {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: stretch;
   gap: 1rem;
   max-width: var(--ese-grid-max-width, 1280px);
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) rgba(255, 255, 255, 0.12);
+}
+
+@media (min-width: 1024px) {
+  .ese-nav-card-container {
+    justify-content: center;
+  }
+}
+
+.ese-nav-card-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ese-nav-card-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+}
+
+.ese-nav-card-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
 }
 
 .ese-nav-card {

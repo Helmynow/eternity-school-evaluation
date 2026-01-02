@@ -79,6 +79,17 @@ export const getErrorMessage = (error, context = '') => {
 export const getSurveyErrorMessage = (error, operation = '') => {
   const baseMessage = getErrorMessage(error, `survey ${operation}`)
   
+  // Handle common "not found" cases even when error isn't an axios error
+  const messageText = typeof error?.message === 'string' ? error.message.toLowerCase() : ''
+  if (messageText.includes('not found')) {
+    if (operation.includes('submit')) {
+      return 'Survey or question not found. The survey may have been closed or removed.'
+    }
+    if (operation.includes('load')) {
+      return 'Survey not found. It may have been deleted or you may not have access.'
+    }
+  }
+
   if (error.response?.status === 404) {
     if (operation.includes('submit')) {
       return 'Survey or question not found. The survey may have been closed or removed.'

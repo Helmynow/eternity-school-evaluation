@@ -4,9 +4,11 @@ import SurveyForm from '../SurveyForm'
 import toast from 'react-hot-toast'
 
 jest.mock('react-hot-toast', () => ({
+  __esModule: true,
   default: {
     success: jest.fn(),
     error: jest.fn(),
+    loading: jest.fn(),
   },
 }))
 
@@ -211,6 +213,13 @@ describe('SurveyForm', () => {
       await user.type(textarea, 'Answer')
       await user.click(screen.getByText('Next'))
       await user.click(screen.getByText('Next'))
+
+      // Question 3 is required (multiple choice) - select an option
+      await waitFor(() => {
+        expect(screen.getByText('Choose an option')).toBeInTheDocument()
+      })
+      await user.click(screen.getByText('Option A'))
+
       await user.click(screen.getByText('Next'))
 
       await waitFor(() => {
@@ -303,6 +312,13 @@ describe('SurveyForm', () => {
       await user.type(textarea, 'Answer')
       await user.click(screen.getByText('Next'))
       await user.click(screen.getByText('Next'))
+
+      // Question 3 is required (multiple choice) - select an option
+      await waitFor(() => {
+        expect(screen.getByText('Choose an option')).toBeInTheDocument()
+      })
+      await user.click(screen.getByText('Option A'))
+
       await user.click(screen.getByText('Next'))
 
       await waitFor(() => {
@@ -353,7 +369,7 @@ describe('SurveyForm', () => {
       await user.type(textarea, 'Answer')
       await user.click(screen.getByText('Next'))
 
-      // Navigate to last question without answering required question 3
+      // Navigate to required question 3 without answering it
       await waitFor(() => {
         expect(screen.getByText('Rate your experience')).toBeInTheDocument()
       })
@@ -361,16 +377,13 @@ describe('SurveyForm', () => {
       await waitFor(() => {
         expect(screen.getByText('Choose an option')).toBeInTheDocument()
       })
+
+      // Attempt to continue without answering required question 3
       await user.click(screen.getByText('Next'))
 
-      // Try to submit
-      const submitButton = screen.getByText('Submit Survey')
-      await user.click(submitButton)
-
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          expect.stringContaining('Please answer all required questions')
-        )
+        expect(toast.error).toHaveBeenCalledWith('This question is required')
+        expect(screen.queryByText('Do you agree?')).not.toBeInTheDocument()
       })
     })
   })
@@ -505,7 +518,9 @@ describe('SurveyForm', () => {
 
       // Initial progress should be 25% (1 of 4)
       const progressBar = screen.getByRole('progressbar', { hidden: true })
-      expect(progressBar).toHaveStyle({ width: '25%' })
+      expect(progressBar).toHaveAttribute('aria-valuenow', '25')
+      const progressFill = progressBar.querySelector('div')
+      expect(progressFill).toHaveStyle({ width: '25%' })
 
       // Navigate to second question
       const textarea = screen.getByPlaceholderText('Enter your response...')
@@ -513,7 +528,8 @@ describe('SurveyForm', () => {
       await user.click(screen.getByText('Next'))
 
       await waitFor(() => {
-        expect(progressBar).toHaveStyle({ width: '50%' })
+        expect(progressBar).toHaveAttribute('aria-valuenow', '50')
+        expect(progressFill).toHaveStyle({ width: '50%' })
       })
     })
   })

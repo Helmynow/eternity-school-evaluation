@@ -102,12 +102,12 @@ const IntegrationHub = () => {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-2 border-b border-ese-ink-light">
+      <div className="flex space-x-2 border-b border-ese-ink-light overflow-x-auto whitespace-nowrap">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 font-medium transition-colors flex items-center space-x-2 ${
+            className={`shrink-0 px-4 py-2 font-medium transition-colors flex items-center space-x-2 ${
               activeTab === tab.id
                 ? 'border-b-2 border-ese-lang-900 text-ese-lang-900'
                 : 'text-ese-ink-medium hover:text-ese-lang-900'
