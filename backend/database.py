@@ -710,7 +710,20 @@ class Database:
 
     def __init__(self, database_url=None):
         if database_url is None:
-            database_url = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/eternity_eval")
+            # Support multiple deployment environments (Supabase, Vercel Postgres, local dev).
+            # Prefer DATABASE_URL, but fall back to Vercel Postgres variables if present.
+            database_url = (
+                os.getenv("DATABASE_URL")
+                or os.getenv("POSTGRES_URL_NON_POOLING")
+                or os.getenv("POSTGRES_URL")
+                or os.getenv("POSTGRES_PRISMA_URL")
+            )
+            if database_url:
+                # Heroku/Vercel sometimes provide "postgres://" which SQLAlchemy doesn't accept.
+                if database_url.startswith("postgres://"):
+                    database_url = "postgresql://" + database_url[len("postgres://") :]
+            else:
+                database_url = "postgresql://user:password@localhost/eternity_eval"
         # Production-ready connection pooling
         pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
         max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
