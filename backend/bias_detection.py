@@ -9,7 +9,10 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+try:
+    from scipy import stats
+except Exception:  # pragma: no cover
+    stats = None
 
 from backend.database import Assignment, Cycle, Evaluation, Person
 
@@ -93,7 +96,7 @@ class BiasDetector:
                 }
 
         # Statistical test for differences
-        if len(ratings_by_context) >= 2:
+        if stats is not None and len(ratings_by_context) >= 2:
             context_groups = [ratings for ratings in ratings_by_context.values() if len(ratings) >= 3]
             if len(context_groups) >= 2:
                 # Kruskal-Wallis test for multiple groups
@@ -732,7 +735,7 @@ class BiasDetector:
 
         # Statistical test for differences between departments
         statistical_test = None
-        if len(dept_ratings) >= 2:
+        if stats is not None and len(dept_ratings) >= 2:
             dept_groups = [ratings for ratings in dept_ratings.values() if len(ratings) >= 3]
             if len(dept_groups) >= 2:
                 try:

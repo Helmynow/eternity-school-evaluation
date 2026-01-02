@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from ai_models.bias_algorithms import AdvancedBiasAlgorithms
 from backend.bias_detection import BiasDetector

@@ -11,7 +11,10 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+try:
+    from scipy import stats
+except Exception:  # pragma: no cover
+    stats = None
 
 from backend.bias_detection import BiasDetector
 from backend.bias_detection_360 import BiasFinding, BiasReport
