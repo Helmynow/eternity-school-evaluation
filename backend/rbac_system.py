@@ -63,7 +63,7 @@ class UserPermission(Base):
     expires_at = Column(DateTime, nullable=True)  # None = unlimited
     revoked_at = Column(DateTime, nullable=True)
     revoked_by = Column(String(255), ForeignKey("people.email"), nullable=True)
-    metadata = Column(JSON)  # Additional permission context
+    metadata_json = Column("metadata", JSON)  # Additional permission context
 
     # Relationships
     user = relationship("Person", foreign_keys=[user_email])
@@ -261,7 +261,7 @@ class RBACSystem:
             permission_type=permission,
             granted_by=granted_by,
             expires_at=expires_at,  # None = unlimited
-            metadata=metadata or {},
+            metadata_json=metadata or {},
         )
 
         self.db.add(new_permission)
@@ -365,7 +365,7 @@ class RBACSystem:
                     "granted_at": perm.granted_at.isoformat(),
                     "expires_at": perm.expires_at.isoformat() if perm.expires_at else None,
                     "unlimited": perm.expires_at is None,
-                    "metadata": perm.metadata,
+                    "metadata": perm.metadata_json,
                 }
             )
 

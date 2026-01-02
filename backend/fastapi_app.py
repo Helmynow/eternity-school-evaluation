@@ -123,7 +123,7 @@ from backend.survey_identity_manager import SurveyIdentityManager
 from backend.survey_templates import EternitySchoolSurveyTemplates
 from backend.system_setup import EternitySchoolSystemSetup
 from backend.weight_matrix_handler import WeightMatrixHandler
-from backend.auth import SupabaseAuthError, decode_supabase_jwt, extract_bearer_token
+from backend.auth import SupabaseAuthError, decode_supabase_jwt, extract_bearer_token, fetch_supabase_user
 
 # Initialize FastAPI app
 DOCS_ENABLED = os.getenv("ENABLE_DOCS", "false" if IS_PRODUCTION else "true").lower() in ("1", "true", "yes")
@@ -151,9 +151,13 @@ from backend.task_scheduler import task_scheduler
 @app.on_event("startup")
 async def startup_event():
     """Start the task scheduler on application startup"""
-    # Fail fast in production if auth is required but JWT verification isn't configured.
+    # In production we prefer local JWT verification via `SUPABASE_JWT_SECRET`, but we can safely fall back to
+    # Supabase's `/auth/v1/user` verification when the secret is missing/misconfigured.
     if IS_PRODUCTION and REQUIRE_SUPABASE_AUTH and not SUPABASE_JWT_SECRET:
-        raise RuntimeError("SUPABASE_JWT_SECRET must be set when REQUIRE_SUPABASE_AUTH is enabled in production")
+        logger.warning(
+            "SUPABASE_JWT_SECRET not set; falling back to Supabase /auth/v1/user token verification. "
+            "For best performance, set SUPABASE_JWT_SECRET to your project's JWT secret."
+        )
     try:
         task_scheduler.start()
         task_scheduler.schedule_daily_tasks()
@@ -286,18 +290,26 @@ async def api_key_middleware(request: Request, call_next):
     token = extract_bearer_token(auth_header)
 
     auth_ctx = None
-    if token and SUPABASE_JWT_SECRET:
-        try:
-            auth_ctx = decode_supabase_jwt(token, jwt_secret=SUPABASE_JWT_SECRET, audience=SUPABASE_JWT_AUD)
-        except SupabaseAuthError as exc:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": str(exc)})
+    if token:
+        # 1) Fast path: verify locally when JWT secret is configured.
+        if SUPABASE_JWT_SECRET:
+            try:
+                auth_ctx = decode_supabase_jwt(token, jwt_secret=SUPABASE_JWT_SECRET, audience=SUPABASE_JWT_AUD)
+            except SupabaseAuthError:
+                auth_ctx = None
+
+        # 2) Fallback: verify against Supabase directly (handles secret mismatch across environments).
+        if not auth_ctx:
+            supabase_url = (os.getenv("VITE_SUPABASE_URL") or os.getenv("SUPABASE_URL") or "").strip()
+            anon_key = (os.getenv("VITE_SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip()
+            try:
+                auth_ctx = fetch_supabase_user(token, supabase_url=supabase_url, anon_key=anon_key)
+            except SupabaseAuthError as exc:
+                # If auth is required, fail hard. If not, treat as unauthenticated.
+                if REQUIRE_SUPABASE_AUTH:
+                    return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": str(exc)})
 
     if REQUIRE_SUPABASE_AUTH:
-        if not SUPABASE_JWT_SECRET:
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": "Supabase JWT secret not configured (SUPABASE_JWT_SECRET)"},
-            )
         if not token:
             return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Authentication required"})
         if not auth_ctx:
@@ -2423,20 +2435,38 @@ async def health_config():
     Safe to expose publicly (booleans only).
     """
     from backend.email_service import EmailService
+    from urllib.parse import urlparse
 
-    supabase_url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "").strip()
-    anon_key = (os.getenv("SUPABASE_ANON_KEY") or "").strip()
+    supabase_url_env = (os.getenv("SUPABASE_URL") or "").strip()
+    supabase_url_vite = (os.getenv("VITE_SUPABASE_URL") or "").strip()
+    supabase_url = (supabase_url_env or supabase_url_vite or "").strip()
+
+    # Prefer VITE_* fallbacks because they reflect what the frontend is actually configured with.
+    anon_key = (os.getenv("SUPABASE_ANON_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY") or "").strip()
     service_role = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY") or "").strip()
 
     email_service = EmailService()
     smtp_password_set = bool(email_service.smtp_password)
 
+    def _host(url: str) -> str:
+        if not url:
+            return ""
+        try:
+            parsed = urlparse(url)
+            return parsed.netloc or parsed.path
+        except Exception:
+            return ""
+
     return {
         "env": os.getenv("ENVIRONMENT", "development"),
         "supabase": {
             "url_set": bool(supabase_url),
+            "url_host": _host(supabase_url),
+            "url_env_host": _host(supabase_url_env) if supabase_url_env else None,
+            "vite_url_host": _host(supabase_url_vite) if supabase_url_vite else None,
             "anon_key_set": bool(anon_key),
             "service_role_key_set": bool(service_role),
+            "jwt_secret_set": bool(SUPABASE_JWT_SECRET),
         },
         "smtp": {
             "smtp_server_set": bool(os.getenv("SMTP_SERVER", "").strip()),
