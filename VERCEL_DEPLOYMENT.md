@@ -27,14 +27,18 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supab
 SMTP_SERVER=smtp.resend.com
 SMTP_PORT=465
 SMTP_USER=resend
-SMTP_PASSWORD=re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2
+SMTP_PASSWORD=[YOUR-SMTP_PASSWORD]
 FROM_EMAIL=noreply@eternityschoolegypt.com
-EMAIL_ENABLED=true
+EMAIL_ENABLED=false
 
 # Supabase
 SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
 SUPABASE_ANON_KEY=[YOUR-SUPABASE-ANON-KEY]
 SUPABASE_SERVICE_ROLE_KEY=[YOUR-SUPABASE-SERVICE-ROLE-KEY]
+
+# Frontend (Vite)
+VITE_SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
+VITE_SUPABASE_ANON_KEY=[YOUR-SUPABASE-ANON-KEY]
 
 # Application
 ENVIRONMENT=production
@@ -49,9 +53,13 @@ ALLOWED_ORIGINS=https://your-domain.vercel.app
 ### Build Settings
 
 - **Framework Preset**: Other
-- **Build Command**: `pip install -r backend/requirements.txt`
-- **Output Directory**: `backend`
-- **Install Command**: `pip install -r backend/requirements.txt`
+- **Build Command**: `cd frontend && npm ci && npm run build`
+- **Output Directory**: `frontend/dist`
+
+### Backend (API)
+
+- The FastAPI backend is deployed as a Vercel Python Serverless Function from `api/index.py`
+- Ensure Python dependencies are available via `requirements.txt`
 
 ## Step 3: Run Database Migrations
 

@@ -25,7 +25,7 @@ ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 **Backend `.env` needed:**
 ```env
 ENVIRONMENT=production
-SENTRY_DSN=https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120
+SENTRY_DSN=[YOUR-SENTRY_DSN]
 SENTRY_TRACES_SAMPLE_RATE=0.1
 SENTRY_PROFILES_SAMPLE_RATE=0.0
 SENTRY_SEND_PII=false
@@ -41,7 +41,7 @@ ESE_API_KEY=your-strong-api-key
 VITE_API_URL=https://api.yourdomain.com
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_SENTRY_DSN=https://a931832e07c9c91543318ce7e31dfaba@o4510482211930112.ingest.de.sentry.io/4510482350145616
+VITE_SENTRY_DSN=[YOUR-VITE_SENTRY_DSN]
 VITE_APP_VERSION=1.0.0
 VITE_API_KEY=your-strong-api-key
 ```

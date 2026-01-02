@@ -26,14 +26,18 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supab
 SMTP_SERVER=smtp.resend.com
 SMTP_PORT=465
 SMTP_USER=resend
-SMTP_PASSWORD=re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2
+SMTP_PASSWORD=[YOUR-SMTP_PASSWORD]
 FROM_EMAIL=noreply@eternityschoolegypt.com
-EMAIL_ENABLED=true
+EMAIL_ENABLED=false
 
 # Supabase Configuration
 SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
 SUPABASE_ANON_KEY=[YOUR-SUPABASE-ANON-KEY]
 SUPABASE_SERVICE_ROLE_KEY=[YOUR-SUPABASE-SERVICE-ROLE-KEY]
+
+# Frontend (Vite)
+VITE_SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
+VITE_SUPABASE_ANON_KEY=[YOUR-SUPABASE-ANON-KEY]
 
 # Application Configuration
 ENVIRONMENT=production

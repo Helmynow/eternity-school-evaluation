@@ -84,7 +84,7 @@ This report documents the end-to-end testing and audit of the Eternity School Ev
 SMTP_SERVER = 'smtp.resend.com'
 SMTP_PORT = 465
 SMTP_USER = 'resend'
-SMTP_PASSWORD = 're_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2'
+SMTP_PASSWORD = '[YOUR-SMTP_PASSWORD]'
 FROM_EMAIL = 'noreply@eternityschoolegypt.com'
 ENABLED = True
 ```

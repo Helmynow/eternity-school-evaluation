@@ -12,7 +12,7 @@
 - `supabase/README.md` - Updated with security warnings and instructions
 
 **Changes:**
-- Removed hard-coded password: `oRyY5M5S5op6ARqi`
+- Removed hard-coded password: `[YOUR-PASSWORD]`
 - Scripts now require `DATABASE_URL` environment variable or `.env` file
 - Added clear error messages if credentials are missing
 - Added security warnings in documentation
@@ -80,7 +80,7 @@
 ## 📋 Remaining Actions
 
 ### ⚠️ Critical: Rotate Database Password
-The database password `oRyY5M5S5op6ARqi` was exposed in version control. 
+The database password `[YOUR-PASSWORD]` was exposed in version control. 
 
 **Steps to rotate:**
 1. Go to Supabase Dashboard

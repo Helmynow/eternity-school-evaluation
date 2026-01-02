@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ywcfqlyhesnikclesgpr.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3Y2ZxbHloZXNuaWtjbGVzZ3ByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI5MDc1NjgsImV4cCI6MjA0ODQ4MzU2OH0.RaXN7ggZ8Ypm7O5xJZ8yvRkoiEFLrNNg6yj5lGmBfFw'
+// Avoid hardcoding keys in the client bundle. Configure via VITE_SUPABASE_ANON_KEY at build time.
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'MISSING_SUPABASE_ANON_KEY'
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('CRITICAL: Supabase configuration is missing!')

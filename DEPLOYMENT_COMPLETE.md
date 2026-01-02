@@ -3,7 +3,7 @@
 ## 🎉 All Tasks Completed Successfully!
 
 ### ✅ 1. Sentry SDK Configured
-- DSN: `https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120`
+- DSN: `[YOUR-SENTRY_DSN]`
 - `send_default_pii=True` enabled
 - `traces_sample_rate=1.0` configured
 - OpenAIIntegration enabled automatically
@@ -81,17 +81,17 @@ Copy all variables from `VERCEL_ENV_VARIABLES.md`:
 
 **Required Variables:**
 ```env
-DATABASE_URL=postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
 SMTP_SERVER=smtp.resend.com
 SMTP_PORT=465
 SMTP_USER=resend
-SMTP_PASSWORD=re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2
+SMTP_PASSWORD=[YOUR-SMTP_PASSWORD]
 FROM_EMAIL=noreply@eternityschoolegypt.com
 EMAIL_ENABLED=true
 SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
 SUPABASE_ANON_KEY=[GET-FROM-SUPABASE-DASHBOARD]
 SUPABASE_SERVICE_ROLE_KEY=[GET-FROM-SUPABASE-DASHBOARD]
-SENTRY_DSN=https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120
+SENTRY_DSN=[YOUR-SENTRY_DSN]
 ENVIRONMENT=production
 ENABLE_DOCS=false
 ALLOWED_ORIGINS=https://your-project.vercel.app

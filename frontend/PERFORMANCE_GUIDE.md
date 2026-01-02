@@ -91,7 +91,7 @@ API requests are automatically tracked for:
 4. Add to `.env`:
 
 ```env
-VITE_SENTRY_DSN=https://a931832e07c9c91543318ce7e31dfaba@o4510482211930112.ingest.de.sentry.io/4510482350145616
+VITE_SENTRY_DSN=[YOUR-VITE_SENTRY_DSN]
 ```
 
 ### Features

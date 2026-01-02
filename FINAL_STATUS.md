@@ -3,7 +3,7 @@
 ## Completed Tasks
 
 ### ✅ 1. Sentry SDK Configured
-- DSN: `https://6a9a496b1708940e265abb51c5ce4879@o4510482211930112.ingest.de.sentry.io/4510633780183120`
+- DSN: `[YOUR-SENTRY_DSN]`
 - `send_default_pii=True` ✅
 - `traces_sample_rate=1.0` ✅
 - Initialized in `backend/fastapi_app.py` ✅

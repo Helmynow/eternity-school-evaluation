@@ -46,7 +46,7 @@
   - Host: `smtp.resend.com`
   - Port: `465` (SSL)
   - User: `resend`
-  - Password: `re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2`
+  - Password: `[YOUR-SMTP_PASSWORD]`
   - Default enabled: `true`
 
 **Email Templates:**
@@ -114,7 +114,7 @@
 smtp_server = 'smtp.resend.com'
 smtp_port = 465  # SSL
 smtp_user = 'resend'
-smtp_password = 're_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2'
+smtp_password = '[YOUR-SMTP_PASSWORD]'
 from_email = 'noreply@eternityschoolegypt.com'
 enabled = True
 ```

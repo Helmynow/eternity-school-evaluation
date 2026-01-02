@@ -20,7 +20,7 @@
 
 **Issue:** Database password exposed in shell scripts
 ```bash
-export DATABASE_URL="postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres"
+export DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres"
 ```
 
 **Action Required:**

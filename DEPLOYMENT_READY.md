@@ -71,11 +71,11 @@ Add all variables from your `.env` file.
 ## 📋 Environment Variables for Vercel
 
 ```env
-DATABASE_URL=postgresql://postgres:oRyY5M5S5op6ARqi@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.ywcfqlyhesnikclesgpr.supabase.co:5432/postgres
 SMTP_SERVER=smtp.resend.com
 SMTP_PORT=465
 SMTP_USER=resend
-SMTP_PASSWORD=re_6dFf5Vue_73jUTecAhnqZaonoGEPaGax2
+SMTP_PASSWORD=[YOUR-SMTP_PASSWORD]
 FROM_EMAIL=noreply@eternityschoolegypt.com
 EMAIL_ENABLED=true
 SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
