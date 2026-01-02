@@ -1,0 +1,9 @@
+-- Drop duplicate indexes (safe)
+DROP INDEX IF EXISTS "public"."idx_survey_responses_survey";
+DROP INDEX IF EXISTS "public"."idx_survey_responses_respondent";
+DROP INDEX IF EXISTS "public"."idx_surveys_status";
+DROP INDEX IF EXISTS "public"."idx_notifications_recipient";
+DROP INDEX IF EXISTS "public"."idx_notifications_user";
+DROP INDEX IF EXISTS "public"."idx_notifications_read";
+DROP INDEX IF EXISTS "public"."idx_notifications_created";
+DROP INDEX IF EXISTS "public"."idx_feedback_submitter";
