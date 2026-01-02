@@ -14,6 +14,8 @@ const EOMDiversityDashboard = lazy(() => import('./components/eom/EOMDiversityDa
 const EOMFeedbackForm = lazy(() => import('./components/eom/EOMFeedbackForm'))
 const MREEvaluation = lazy(() => import('./components/mre/MREEvaluation'))
 const Login = lazy(() => import('./components/auth/Login'))
+const ForgotPassword = lazy(() => import('./components/auth/ForgotPassword'))
+const ResetPassword = lazy(() => import('./components/auth/ResetPassword'))
 const Layout = lazy(() => import('./components/layout/Layout'))
 const CycleManagement = lazy(() => import('./components/admin/CycleManagement'))
 const StaffManagement = lazy(() => import('./components/admin/StaffManagement'))
@@ -57,6 +59,8 @@ function App() {
         <Suspense fallback={<LoadingSkeleton type="dashboard" count={1} />}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </Suspense>
@@ -66,6 +70,7 @@ function App() {
             <Layout>
               <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/eom/nominate" element={<EOMNomination />} />
             <Route path="/eom/vote" element={<EOMNomination mode="vote" />} />
             <Route path="/eom/hall-of-fame" element={<EOMHallOfFame />} />

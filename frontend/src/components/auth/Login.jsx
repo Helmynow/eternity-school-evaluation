@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import toast from 'react-hot-toast'
 // Logo path - public assets are served at root
@@ -96,6 +96,14 @@ const Login = ({ supabase: supabaseClient }) => {
                 placeholder="Enter your password"
                 disabled={loading}
               />
+              <div className="mt-2 flex justify-end">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-ese-lang-900 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             <button
