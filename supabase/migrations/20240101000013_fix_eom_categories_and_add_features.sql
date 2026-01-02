@@ -195,6 +195,7 @@ BEGIN
         FROM information_schema.tables
         WHERE table_schema = 'public'
           AND table_name = 'people'
+          AND table_type = 'BASE TABLE'
     ) THEN
         IF NOT EXISTS (
             SELECT 1
@@ -239,29 +240,48 @@ COMMENT ON COLUMN eom_voters.vote_weight IS 'Vote weight: Principal 0.40, Manage
 -- Function to set default vote weights based on role
 CREATE OR REPLACE FUNCTION set_default_vote_weights()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_role_title TEXT;
+    v_role_col TEXT;
 BEGIN
     -- Set vote weights based on role (if not already set)
     IF NEW.vote_weight IS NULL OR NEW.vote_weight = 1.0 THEN
-        -- Determine voter role title from people table
-        DECLARE
-            v_role_title TEXT;
-        BEGIN
-            SELECT role_title INTO v_role_title
-            FROM people
-            WHERE email = NEW.voter_email;
+        -- Determine voter role title from people table (schema-tolerant)
+        SELECT column_name
+        INTO v_role_col
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'people'
+          AND column_name IN ('role_title', 'role', 'job_title', 'position', 'title')
+        ORDER BY CASE column_name
+            WHEN 'role_title' THEN 1
+            WHEN 'role' THEN 2
+            WHEN 'job_title' THEN 3
+            WHEN 'position' THEN 4
+            WHEN 'title' THEN 5
+            ELSE 100
+        END
+        LIMIT 1;
 
-            v_role_title := COALESCE(v_role_title, '');
+        IF v_role_col IS NOT NULL THEN
+            EXECUTE format('SELECT %I FROM public.people WHERE email = $1', v_role_col)
+            INTO v_role_title
+            USING NEW.voter_email;
+        ELSE
+            v_role_title := NULL;
+        END IF;
 
-            IF v_role_title ILIKE '%principal%' OR v_role_title ILIKE '%stage principal%' THEN
+        v_role_title := COALESCE(v_role_title, '');
+
+        IF v_role_title ILIKE '%principal%' OR v_role_title ILIKE '%stage principal%' THEN
             NEW.vote_weight := 0.40;
-            ELSIF v_role_title ILIKE '%manager%' OR v_role_title ILIKE '%head%' THEN
+        ELSIF v_role_title ILIKE '%manager%' OR v_role_title ILIKE '%head%' THEN
             NEW.vote_weight := 0.30;
-            ELSIF v_role_title ILIKE '%ceo%' OR v_role_title ILIKE '%director%' THEN
+        ELSIF v_role_title ILIKE '%ceo%' OR v_role_title ILIKE '%director%' THEN
             NEW.vote_weight := 0.30;
-            ELSE
+        ELSE
             NEW.vote_weight := 1.0; -- Default equal weight
-            END IF;
-        END;
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -335,22 +355,56 @@ CREATE TRIGGER trigger_calculate_variance
 -- ============================================================================
 
 -- Create view for EOM diversity tracking
+DO $$
+DECLARE
+    v_role_col TEXT;
+    v_role_select TEXT;
+    v_role_group TEXT;
+BEGIN
+    SELECT column_name
+    INTO v_role_col
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'people'
+      AND column_name IN ('role_title', 'role', 'job_title', 'position', 'title')
+    ORDER BY CASE column_name
+        WHEN 'role_title' THEN 1
+        WHEN 'role' THEN 2
+        WHEN 'job_title' THEN 3
+        WHEN 'position' THEN 4
+        WHEN 'title' THEN 5
+        ELSE 100
+    END
+    LIMIT 1;
+
+    v_role_select := CASE
+        WHEN v_role_col IS NOT NULL THEN format('p.%I', v_role_col)
+        ELSE 'NULL::VARCHAR(100)'
+    END;
+    v_role_group := CASE
+        WHEN v_role_col IS NOT NULL THEN format(', p.%I', v_role_col)
+        ELSE ''
+    END;
+
+    EXECUTE format($view$
 CREATE OR REPLACE VIEW eom_diversity_tracking AS
-SELECT 
+SELECT
     ec.id as cycle_id,
     c.name as cycle_name,
     ew.category,
     p.segment,
     p.department,
-    p.role_title,
+    %s as role_title,
     COUNT(DISTINCT ew.winner_email) as winners_count,
     COUNT(DISTINCT en.nominee_email) as nominees_count
 FROM eom_cycles ec
 JOIN cycles c ON c.id = ec.cycle_id
 LEFT JOIN eom_winners ew ON ew.eom_cycle_id = ec.id
 LEFT JOIN eom_nominees en ON en.eom_cycle_id = ec.id
-LEFT JOIN people p ON p.email = COALESCE(ew.winner_email, en.nominee_email)
-GROUP BY ec.id, c.name, ew.category, p.segment, p.department, p.role_title;
+LEFT JOIN public.people p ON p.email = COALESCE(ew.winner_email, en.nominee_email)
+GROUP BY ec.id, c.name, ew.category, p.segment, p.department%s;
+$view$, v_role_select, v_role_group);
+END $$;
 
 COMMENT ON VIEW eom_diversity_tracking IS 'Tracks EOM recognition across gender, department, and role for diversity monitoring';
 
@@ -379,8 +433,40 @@ COMMENT ON TABLE eom_feedback IS 'Collects feedback from nominees, nominators, a
 -- 7. ADD HALL OF FAME / WINNERS HISTORY VIEW
 -- ============================================================================
 
+DO $$
+DECLARE
+    v_role_col TEXT;
+    v_role_select TEXT;
+    v_role_group TEXT;
+BEGIN
+    SELECT column_name
+    INTO v_role_col
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'people'
+      AND column_name IN ('role_title', 'role', 'job_title', 'position', 'title')
+    ORDER BY CASE column_name
+        WHEN 'role_title' THEN 1
+        WHEN 'role' THEN 2
+        WHEN 'job_title' THEN 3
+        WHEN 'position' THEN 4
+        WHEN 'title' THEN 5
+        ELSE 100
+    END
+    LIMIT 1;
+
+    v_role_select := CASE
+        WHEN v_role_col IS NOT NULL THEN format('p.%I', v_role_col)
+        ELSE 'NULL::VARCHAR(100)'
+    END;
+    v_role_group := CASE
+        WHEN v_role_col IS NOT NULL THEN format(', p.%I', v_role_col)
+        ELSE ''
+    END;
+
+    EXECUTE format($view$
 CREATE OR REPLACE VIEW eom_hall_of_fame AS
-SELECT 
+SELECT
     ew.id,
     ew.eom_cycle_id,
     c.name as cycle_name,
@@ -390,7 +476,7 @@ SELECT
     p.full_name as winner_name,
     p.email as winner_email,
     p.department,
-    p.role_title,
+    %s as role_title,
     p.segment,
     en.nomination_reason,
     COUNT(DISTINCT ev.id) as total_votes,
@@ -399,15 +485,17 @@ SELECT
 FROM eom_winners ew
 JOIN eom_cycles ec ON ew.eom_cycle_id = ec.id
 JOIN cycles c ON c.id = ec.cycle_id
-JOIN people p ON ew.winner_email = p.email
-LEFT JOIN eom_nominees en ON en.eom_cycle_id = ew.eom_cycle_id 
-    AND en.nominee_email = ew.winner_email 
+JOIN public.people p ON ew.winner_email = p.email
+LEFT JOIN eom_nominees en ON en.eom_cycle_id = ew.eom_cycle_id
+    AND en.nominee_email = ew.winner_email
     AND en.category = ew.category
 LEFT JOIN eom_voters ev ON ev.eom_cycle_id = ew.eom_cycle_id
-GROUP BY ew.id, ew.eom_cycle_id, c.name, c.start_date, c.end_date, 
-    ew.category, p.full_name, p.email, p.department, p.role_title, 
+GROUP BY ew.id, ew.eom_cycle_id, c.name, c.start_date, c.end_date,
+    ew.category, p.full_name, p.email, p.department%s,
     p.segment, en.nomination_reason, ec.announcement_date, ew.announced_at
 ORDER BY c.start_date DESC, ew.category;
+$view$, v_role_select, v_role_group);
+END $$;
 
 COMMENT ON VIEW eom_hall_of_fame IS 'Complete history of EOM winners - the Hall of Fame';
 
