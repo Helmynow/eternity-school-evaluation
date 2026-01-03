@@ -984,7 +984,7 @@ class Database:
             pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
             pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "300"))  # 5 min recycle
 
-            logger.info(f"Database configured for PERSISTENT mode (QueuePool: " f"size={pool_size}, overflow={max_overflow})")
+            logger.info(f"Database configured for PERSISTENT mode (QueuePool: size={pool_size}, overflow={max_overflow})")
 
             Database._engine = create_engine(
                 database_url,
