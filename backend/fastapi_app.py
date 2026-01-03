@@ -1186,9 +1186,75 @@ async def update_rotation_eligibility_flags(eom_cycle_id: int, db: Session = Dep
 # ============================================================================
 
 
+@app.get("/api/v2/mre/assignments/{cycle_id}")
+async def get_mre_assignments(cycle_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Get MRE assignments for the authenticated rater in a given cycle.
+
+    The frontend uses this to render the "Pending/Completed Evaluations" list.
+    """
+    try:
+        current_user_email = _require_authenticated_email(request)
+
+        assignments = (
+            db.query(Assignment)
+            .filter(
+                Assignment.cycle_id == cycle_id,
+                func.lower(Assignment.rater_email) == current_user_email.lower(),
+            )
+            .order_by(Assignment.created_at.asc())
+            .all()
+        )
+
+        assignment_ids = [a.id for a in assignments]
+        evaluations_by_assignment: Dict[int, Evaluation] = {}
+        if assignment_ids:
+            eval_rows = db.query(Evaluation).filter(Evaluation.assignment_id.in_(assignment_ids)).all()
+            for ev in eval_rows:
+                # Keep the "best" status if multiple exist (should not happen, but be defensive)
+                existing = evaluations_by_assignment.get(ev.assignment_id)
+                if not existing:
+                    evaluations_by_assignment[ev.assignment_id] = ev
+                elif existing.status != "submitted" and ev.status == "submitted":
+                    evaluations_by_assignment[ev.assignment_id] = ev
+
+        # Hydrate target display names
+        target_emails = {a.target_email for a in assignments}
+        people_by_email: Dict[str, Person] = {}
+        if target_emails:
+            people = db.query(Person).filter(Person.email.in_(list(target_emails))).all()
+            people_by_email = {p.email: p for p in people}
+
+        payload = []
+        for a in assignments:
+            ev = evaluations_by_assignment.get(a.id)
+            status_value = (ev.status if ev and ev.status else "pending") if ev else "pending"
+            target_person = people_by_email.get(a.target_email)
+            payload.append(
+                {
+                    "id": a.id,
+                    "cycle_id": a.cycle_id,
+                    "rater_email": a.rater_email,
+                    "target_email": a.target_email,
+                    "target_name": target_person.full_name if target_person else a.target_email,
+                    "target_group": a.target_group,
+                    "rater_context": a.rater_context,
+                    "weight": a.weight,
+                    "required": True,
+                    "status": status_value,
+                }
+            )
+
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving assignments: {str(e)}")
+
+
 @app.post("/api/v2/mre/evaluations/process", response_model=MREEvaluationResponse)
 async def process_mre_evaluation(
-    evaluation: MREEvaluationRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+    evaluation: MREEvaluationRequest, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ):
     """
     Process an MRE evaluation with automatic weight calculation.
@@ -1199,11 +1265,20 @@ async def process_mre_evaluation(
     - Stores domain-specific scores if provided
     """
     try:
+        current_user_email = _require_authenticated_email(request)
+
         # Get assignment to determine weights
         assignment = db.query(Assignment).filter(Assignment.id == evaluation.assignment_id).first()
 
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
+
+        if assignment.rater_email.lower() != current_user_email.lower():
+            from backend.rbac_system import RBACSystem
+
+            rbac = RBACSystem(db)
+            if not rbac.is_super_admin(current_user_email):
+                raise HTTPException(status_code=403, detail="You can only submit evaluations for your own assignments")
 
         # Get cycle for weight matrix handler
         cycle = db.query(Cycle).filter(Cycle.id == assignment.cycle_id).first()
@@ -2554,26 +2629,36 @@ async def password_recovery(payload: PasswordRecoveryRequest, http_request: Requ
 
     Security:
     - Always returns a generic message (no email enumeration).
-    - Redirect target is derived from allowed origins (CORS allow-list) to prevent open redirects.
+    - Redirect target is derived from configured allowed origins (CORS allow-list) to prevent Host header injection.
     """
 
-    # Safe redirect target: always use the host we are currently serving (prevents open redirects).
-    host = http_request.headers.get("host") or ""
-    scheme = "https" if host and "localhost" not in host else "http"
-    candidate_origin = f"{scheme}://{host}" if host else "http://localhost:5173"
-    redirect_to = f"{candidate_origin.rstrip('/')}/reset-password"
+    def _select_password_recovery_origin(req: Request) -> str:
+        allowed = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+        allowed = [o.rstrip("/") for o in allowed if o.startswith("http://") or o.startswith("https://")]
+        if allowed:
+            return allowed[0]
+
+        # In production, never derive redirects from the request Host header.
+        if IS_PRODUCTION:
+            raise HTTPException(status_code=500, detail="ALLOWED_ORIGINS must be set for password recovery redirects")
+
+        host = req.headers.get("host") or ""
+        scheme = "https" if host and "localhost" not in host else "http"
+        candidate_origin = f"{scheme}://{host}" if host else "http://localhost:5173"
+        return candidate_origin.rstrip("/")
+
+    redirect_origin = _select_password_recovery_origin(http_request)
+    redirect_to = f"{redirect_origin}/reset-password"
 
     # Supabase configuration
-    supabase_url = (
-        os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "https://ywcfqlyhesnikclesgpr.supabase.co"
-    ).rstrip("/")
+    supabase_url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "").strip().rstrip("/")
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
     anon_key = os.getenv("SUPABASE_ANON_KEY")
 
     generic_message = "If an account exists for that email, you'll receive a reset link shortly."
 
     # 1) Preferred: generate recovery link via Supabase Admin API and send via SMTP
-    if service_role_key:
+    if service_role_key and supabase_url:
         try:
             resp = requests.post(
                 f"{supabase_url}/auth/v1/admin/generate_link",
@@ -2647,7 +2732,7 @@ async def password_recovery(payload: PasswordRecoveryRequest, http_request: Requ
             logger.error("Password recovery (SMTP) attempt failed: %s", str(e))
 
     # 2) Fallback: Supabase built-in recovery email (requires anon key)
-    if anon_key:
+    if anon_key and supabase_url:
         try:
             resp = requests.post(
                 f"{supabase_url}/auth/v1/recover",
