@@ -111,6 +111,7 @@ from backend.database import (
     SystemSetting,
     VarianceAlert,
     WeightMatrix,
+    check_database_health,
 )
 from backend.eom_rotation_manager import EOMRotationManager
 from backend.eom_validation import EOMNominationValidator
@@ -168,12 +169,19 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Stop the task scheduler on application shutdown"""
+    """Stop the task scheduler and clean up database connections on shutdown"""
     try:
         task_scheduler.stop()
         logger.info("Task scheduler stopped")
     except Exception as e:
         logger.error(f"Error stopping task scheduler: {str(e)}")
+
+    # Properly dispose of database connection pool
+    try:
+        _db_instance.close()
+        logger.info("Database connection pool disposed")
+    except Exception as e:
+        logger.error(f"Error disposing database connection pool: {str(e)}")
 
 
 # Authentication configuration
@@ -393,11 +401,20 @@ async def trigger_error():
     division_by_zero = 1 / 0
 
 
+# Database singleton instance - created once at module load
+_db_instance = Database()
+
+
 # Database dependency
 def get_db():
-    """Dependency to get database session"""
-    db = Database()
-    session = db.get_session()
+    """
+    Dependency to get database session.
+    
+    Uses singleton Database instance to prevent connection pool exhaustion.
+    Each request gets a session from the shared pool, which is returned
+    when the request completes.
+    """
+    session = _db_instance.get_session()
     try:
         yield session
     finally:
@@ -2422,6 +2439,32 @@ async def health_check_simple():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "version": "2.0.0",
+    }
+
+
+@app.get("/api/v2/health/database")
+async def health_check_database():
+    """
+    Database health check with connection pool status.
+    
+    Useful for monitoring connection pool utilization during high load
+    (e.g., when 200 users are voting/evaluating simultaneously).
+    """
+    return check_database_health()
+
+
+@app.get("/api/v2/health/pool")
+async def health_check_pool():
+    """
+    Connection pool status for monitoring.
+    
+    Returns:
+    - mode: "serverless" (NullPool) or "persistent" (QueuePool)
+    - For persistent mode: size, checkedin, checkedout, overflow counts
+    """
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "pool": Database.get_pool_status(),
     }
 
 

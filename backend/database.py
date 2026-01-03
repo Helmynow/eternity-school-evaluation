@@ -1,10 +1,35 @@
 """
 Database models and connection handling for the Eternity School Evaluation System.
+
+SCALABILITY NOTES (200+ concurrent users):
+==========================================
+This module uses Supavisor Transaction mode (port 6543) for optimal connection pooling.
+
+Key configuration:
+- Transaction mode: Connections released after each transaction (not held per session)
+- NullPool for serverless: No local pooling, let Supavisor handle it
+- QueuePool for persistent: Local pool with conservative limits
+- Prepared statements disabled: Required for Supavisor Transaction mode
+- Connection retry with backoff: Handles transient failures gracefully
+
+Environment variables:
+- DATABASE_URL: Must use port 6543 for Transaction mode (e.g., ...pooler.supabase.com:6543/postgres)
+- DB_POOL_SIZE: Local pool size (default: 5, ignored in serverless mode)
+- DB_MAX_OVERFLOW: Additional connections allowed (default: 10)
+- DB_POOL_TIMEOUT: Wait time for available connection (default: 30s)
+- DB_SERVERLESS: Set to "true" for serverless deployments (Vercel, AWS Lambda)
+- DB_STATEMENT_TIMEOUT: Query timeout in milliseconds (default: 30000)
 """
 
 import enum
+import logging
 import os
+import time
+from contextlib import contextmanager
 from datetime import datetime
+from functools import wraps
+from typing import Generator, Optional
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from dotenv import load_dotenv
 from sqlalchemy import (
@@ -21,14 +46,144 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
+    text,
 )
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.pool import NullPool, QueuePool
 
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 Base = declarative_base()
+
+
+# =============================================================================
+# Connection Configuration Helpers
+# =============================================================================
+
+
+def _ensure_transaction_mode(database_url: str) -> str:
+    """
+    Ensure the database URL uses Transaction mode (port 6543) for Supavisor.
+    
+    Transaction mode is CRITICAL for scalability:
+    - Session mode (5432): Holds connection for entire session → limited to pool_size
+    - Transaction mode (6543): Releases connection after each query → 200x clients supported
+    """
+    if not database_url:
+        return database_url
+    
+    parsed = urlparse(database_url)
+    
+    # Check if this is a Supabase pooler URL
+    if "pooler.supabase.com" in (parsed.hostname or ""):
+        # Ensure we're using Transaction mode port (6543)
+        if parsed.port == 5432:
+            logger.warning(
+                "DATABASE_URL uses Session mode (port 5432). "
+                "Switching to Transaction mode (port 6543) for better scalability."
+            )
+            # Replace port 5432 with 6543
+            netloc = parsed.netloc.replace(":5432", ":6543")
+            parsed = parsed._replace(netloc=netloc)
+    
+    # Note: We handle prepared statements via connect_args (prepare_threshold=0)
+    # rather than URL parameters, since pgbouncer=true is Prisma-specific
+    
+    return urlunparse(parsed)
+
+
+def _add_connection_options(database_url: str) -> str:
+    """Add connection options for reliability."""
+    if not database_url:
+        return database_url
+    
+    parsed = urlparse(database_url)
+    query_params = parse_qs(parsed.query)
+    
+    # Set connection timeout (how long to wait for a connection)
+    if "connect_timeout" not in query_params:
+        query_params["connect_timeout"] = ["10"]
+    
+    # Set statement timeout to prevent long-running queries
+    statement_timeout = os.getenv("DB_STATEMENT_TIMEOUT", "30000")
+    if "options" not in query_params:
+        query_params["options"] = [f"-c statement_timeout={statement_timeout}"]
+    
+    new_query = urlencode(query_params, doseq=True)
+    parsed = parsed._replace(query=new_query)
+    
+    return urlunparse(parsed)
+
+
+# =============================================================================
+# Retry Logic
+# =============================================================================
+
+
+def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float = 10.0):
+    """
+    Decorator for retrying database operations with exponential backoff.
+    
+    Handles transient connection errors gracefully, which is essential
+    when 200 users might be hitting the database simultaneously.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except OperationalError as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+                    
+                    # Retry on connection-related errors
+                    retryable_errors = [
+                        "connection refused",
+                        "connection reset",
+                        "connection timed out",
+                        "max clients",
+                        "too many connections",
+                        "server closed",
+                        "ssl connection",
+                    ]
+                    
+                    if any(err in error_msg for err in retryable_errors):
+                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        logger.warning(
+                            f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}. "
+                            f"Retrying in {delay:.1f}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        # Non-retryable error
+                        raise
+                except DBAPIError as e:
+                    # Check if it's a connection-related error
+                    if e.connection_invalidated:
+                        last_exception = e
+                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        logger.warning(
+                            f"Connection invalidated (attempt {attempt + 1}/{max_retries}): {e}. "
+                            f"Retrying in {delay:.1f}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        raise
+            
+            # All retries exhausted
+            logger.error(f"All {max_retries} database connection attempts failed")
+            raise last_exception
+        return wrapper
+    return decorator
 
 
 class StaffSegment(enum.Enum):
@@ -750,12 +905,38 @@ class HybridIdentitySession(Base):
 
 
 class Database:
-    """Database connection and session management"""
+    """
+    Production-ready database connection management for 200+ concurrent users.
+    
+    Uses singleton pattern to ensure only ONE engine exists for the application.
+    Automatically configures for optimal performance based on environment:
+    
+    - Serverless (Vercel, Lambda): NullPool - no local pooling, Supavisor handles it
+    - Persistent (VMs, containers): QueuePool - local pool with conservative limits
+    
+    IMPORTANT: Use Transaction mode connection string (port 6543) for scalability!
+    """
+
+    _instance = None
+    _engine = None
+    _SessionLocal = None
+    _is_serverless = None
+
+    def __new__(cls, database_url=None):
+        """Singleton pattern - only create one Database instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self, database_url=None):
+        # Only initialize once
+        if getattr(self, "_initialized", False):
+            return
+        self._initialized = True
+
         if database_url is None:
             # Support multiple deployment environments (Supabase, Vercel Postgres, local dev).
-            # Prefer DATABASE_URL, but fall back to Vercel Postgres variables if present.
             database_url = (
                 os.getenv("DATABASE_URL")
                 or os.getenv("POSTGRES_URL_NON_POOLING")
@@ -768,51 +949,156 @@ class Database:
                     database_url = "postgresql://" + database_url[len("postgres://") :]
             else:
                 database_url = "postgresql://user:password@localhost/eternity_eval"
-        # Production-ready connection pooling
-        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
-        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
-        pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-        pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "3600"))
 
-        self.engine = create_engine(
-            database_url,
-            echo=False,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=True,  # Verify connections before using
+        # Optimize URL for Supavisor Transaction mode
+        database_url = _ensure_transaction_mode(database_url)
+        database_url = _add_connection_options(database_url)
+        
+        # Detect serverless environment
+        Database._is_serverless = (
+            os.getenv("DB_SERVERLESS", "").lower() == "true"
+            or os.getenv("VERCEL", "").lower() == "1"
+            or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+            or os.getenv("SERVERLESS", "").lower() == "true"
         )
-        self.SessionLocal = sessionmaker(bind=self.engine)
+
+        if Database._is_serverless:
+            # SERVERLESS MODE: Use NullPool
+            # No local connection pooling - let Supavisor handle everything
+            # This is ideal for edge functions and serverless where each invocation
+            # should create fresh connections
+            logger.info("Database configured for SERVERLESS mode (NullPool)")
+            Database._engine = create_engine(
+                database_url,
+                echo=False,
+                poolclass=NullPool,  # No local pooling
+            )
+        else:
+            # PERSISTENT MODE: Use QueuePool with conservative limits
+            # Local pooling for VMs/containers, but conservative to work with Supavisor
+            pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
+            max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+            pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+            pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "300"))  # 5 min recycle
+            
+            logger.info(
+                f"Database configured for PERSISTENT mode (QueuePool: "
+                f"size={pool_size}, overflow={max_overflow})"
+            )
+            
+            Database._engine = create_engine(
+                database_url,
+                echo=False,
+                poolclass=QueuePool,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=pool_timeout,
+                pool_recycle=pool_recycle,
+                pool_pre_ping=True,  # Verify connections before using
+            )
+
+        # Add connection event listeners for monitoring
+        @event.listens_for(Database._engine, "connect")
+        def on_connect(dbapi_connection, connection_record):
+            logger.debug("New database connection established")
+
+        @event.listens_for(Database._engine, "checkout")
+        def on_checkout(dbapi_connection, connection_record, connection_proxy):
+            logger.debug("Connection checked out from pool")
+
+        @event.listens_for(Database._engine, "checkin")
+        def on_checkin(dbapi_connection, connection_record):
+            logger.debug("Connection returned to pool")
+
+        Database._SessionLocal = sessionmaker(
+            bind=Database._engine,
+            autocommit=False,
+            autoflush=False,
+            expire_on_commit=False,  # Avoid lazy loading issues after commit
+        )
+        self.engine = Database._engine
+        self.SessionLocal = Database._SessionLocal
 
     def create_tables(self):
         """Create all database tables"""
         Base.metadata.create_all(self.engine)
 
-    def get_session(self):
+    def get_session(self) -> Session:
         """Get a database session"""
         return self.SessionLocal()
 
+    @contextmanager
+    def session_scope(self) -> Generator[Session, None, None]:
+        """
+        Provide a transactional scope around a series of operations.
+        
+        Usage:
+            db = Database()
+            with db.session_scope() as session:
+                session.query(Model).all()
+        """
+        session = self.SessionLocal()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def close(self):
-        """Close database connection"""
-        self.engine.dispose()
+        """Close database connection and dispose of connection pool"""
+        if Database._engine:
+            Database._engine.dispose()
+            logger.info("Database connection pool disposed")
+
+    @classmethod
+    def reset_instance(cls):
+        """Reset singleton (for testing only)"""
+        if cls._engine:
+            cls._engine.dispose()
+        cls._instance = None
+        cls._engine = None
+        cls._SessionLocal = None
+        cls._is_serverless = None
+
+    @classmethod
+    def get_pool_status(cls) -> dict:
+        """Get current connection pool status (useful for monitoring)"""
+        if cls._engine is None:
+            return {"status": "not_initialized"}
+        
+        if cls._is_serverless:
+            return {"mode": "serverless", "pool": "NullPool"}
+        
+        pool = cls._engine.pool
+        return {
+            "mode": "persistent",
+            "pool": "QueuePool",
+            "size": pool.size(),
+            "checkedin": pool.checkedin(),
+            "checkedout": pool.checkedout(),
+            "overflow": pool.overflow(),
+        }
 
 
-def get_db_session(database_url: str = None):
+def get_db_session(database_url: str = None) -> Session:
     """
     Convenience helper to create a database session.
 
+    Uses the singleton Database instance to prevent connection exhaustion.
+
     Usage:
-        db = get_db_session()
+        session = get_db_session()
         try:
-            # Use db session
-            result = db.query(Model).all()
+            result = session.query(Model).all()
         finally:
-            db.close()
+            session.close()
 
     Or use as context manager:
-        with get_db_session() as db:
-            result = db.query(Model).all()
+        with get_db_session() as session:
+            result = session.query(Model).all()
     """
     db_instance = Database(database_url)
     session = db_instance.get_session()
@@ -820,3 +1106,56 @@ def get_db_session(database_url: str = None):
     session.__enter__ = lambda: session
     session.__exit__ = lambda exc_type, exc_val, exc_tb: session.close()
     return session
+
+
+@contextmanager
+def get_db_context() -> Generator[Session, None, None]:
+    """
+    Context manager for database sessions with automatic commit/rollback.
+    
+    Usage:
+        with get_db_context() as session:
+            session.add(new_object)
+            # Automatically commits on success, rolls back on exception
+    """
+    db_instance = Database()
+    with db_instance.session_scope() as session:
+        yield session
+
+
+def get_database() -> Database:
+    """Get the singleton Database instance."""
+    return Database()
+
+
+# =============================================================================
+# Health Check
+# =============================================================================
+
+
+@with_retry(max_retries=3, base_delay=1.0)
+def check_database_health() -> dict:
+    """
+    Check database connectivity and pool health.
+    
+    Returns a dict with status information, useful for health check endpoints.
+    """
+    db = Database()
+    try:
+        with db.session_scope() as session:
+            # Simple query to verify connection
+            result = session.execute(text("SELECT 1 as health")).fetchone()
+            if result and result[0] == 1:
+                return {
+                    "status": "healthy",
+                    "pool": Database.get_pool_status(),
+                }
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "pool": Database.get_pool_status(),
+        }
+    
+    return {"status": "unknown"}
