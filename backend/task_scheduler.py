@@ -12,7 +12,16 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
-from backend.database import Assignment, Cycle, EmailNotification, EOMCycle, Evaluation, Person, get_db_session
+from backend.database import (
+    Assignment,
+    Cycle,
+    EmailNotification,
+    EOMCycle,
+    EOMNominee,
+    Evaluation,
+    Person,
+    get_db_session,
+)
 from backend.email_service import EmailService
 from backend.smart_notification_system import SmartNotificationSystem
 

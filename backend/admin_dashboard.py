@@ -12,7 +12,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from backend.database import Cycle, Person, Survey, SurveyConditionalReveal, SurveyIdentityPreference, SurveyIdentityReveal, SurveyResponse, VarianceAlert
+from backend.database import (
+    Assignment,
+    Cycle,
+    Evaluation,
+    Person,
+    Survey,
+    SurveyConditionalReveal,
+    SurveyIdentityPreference,
+    SurveyIdentityReveal,
+    SurveyResponse,
+    VarianceAlert,
+)
 
 # Simple in-memory cache storage
 # Structure: { key: (value, timestamp) }
