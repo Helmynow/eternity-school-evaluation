@@ -4,13 +4,46 @@ Comprehensive admin dashboard for managing the hybrid identity survey system.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from functools import wraps
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from backend.database import Cycle, Person, SurveyConditionalReveal, SurveyIdentityPreference, SurveyIdentityReveal
+from backend.database import Cycle, Person, Survey, SurveyConditionalReveal, SurveyIdentityPreference, SurveyIdentityReveal, SurveyResponse, VarianceAlert
+
+# Simple in-memory cache storage
+# Structure: { key: (value, timestamp) }
+_DASHBOARD_CACHE: Dict[Tuple, Tuple[Any, float]] = {}
+
+def dashboard_cache(ttl_seconds: int = 300):
+    """
+    Simple time-based cache for dashboard methods.
+    Caches results based on method name and arguments.
+    Safe for returning primitive types (Dict, List, int, str).
+    Do NOT use for returning SQLAlchemy objects attached to sessions.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            # Generate key from method name and arguments
+            # We don't include 'self' in the key effectively, acting as a global cache
+            # This assumes the dashboard content is global for the system (which it seems to be)
+            key = (func.__name__, args, frozenset(kwargs.items()))
+            
+            now = time.time()
+            if key in _DASHBOARD_CACHE:
+                result, timestamp = _DASHBOARD_CACHE[key]
+                if now - timestamp < ttl_seconds:
+                    return result
+            
+            result = func(self, *args, **kwargs)
+            _DASHBOARD_CACHE[key] = (result, now)
+            return result
+        return wrapper
+    return decorator
 
 
 class EternitySchoolAdminDashboard:
@@ -20,6 +53,7 @@ class EternitySchoolAdminDashboard:
         self.db = db_session
         self.logger = logging.getLogger(__name__)
 
+    @dashboard_cache(ttl_seconds=60)
     def get_main_dashboard(self, admin_id: str) -> Dict:
         """Get comprehensive admin dashboard data"""
         return {
@@ -35,13 +69,14 @@ class EternitySchoolAdminDashboard:
             "admin_tools": self.get_admin_tools(),
         }
 
+    @dashboard_cache(ttl_seconds=300)
     def get_overview_cards(self) -> List[Dict]:
         """Key overview metric cards"""
         return [
             {
                 "title": "Active Surveys",
                 "value": self.get_active_survey_count(),
-                "change": "+12% from last month",
+                "change": "+12% from last month", # Placeholder change
                 "icon": "survey",
                 "color": "blue",
                 "link": "/admin/surveys",
@@ -49,7 +84,7 @@ class EternitySchoolAdminDashboard:
             {
                 "title": "Response Rate",
                 "value": f"{self.get_response_rate()}%",
-                "change": "+5% from last week",
+                "change": "+5% from last week", # Placeholder change
                 "icon": "responses",
                 "color": "green",
                 "link": "/admin/responses",
@@ -57,7 +92,7 @@ class EternitySchoolAdminDashboard:
             {
                 "title": "Bias Alerts",
                 "value": self.get_active_bias_alerts(),
-                "change": "-3 from yesterday",
+                "change": "-3 from yesterday", # Placeholder change
                 "icon": "alert",
                 "color": "orange",
                 "link": "/admin/bias-detection",
@@ -65,7 +100,7 @@ class EternitySchoolAdminDashboard:
             {
                 "title": "Fairness Score",
                 "value": f"{self.get_fairness_score()}/100",
-                "change": "+2 points this week",
+                "change": "+2 points this week", # Placeholder change
                 "icon": "fairness",
                 "color": "purple",
                 "link": "/admin/fairness",
@@ -73,7 +108,7 @@ class EternitySchoolAdminDashboard:
         ]
 
     def get_real_time_metrics(self) -> Dict:
-        """Get real-time system metrics"""
+        """Get real-time system metrics (NOT CACHED or short cache)"""
         # Get identity mode distribution
         identity_dist = self.get_identity_mode_distribution()
 
@@ -93,12 +128,13 @@ class EternitySchoolAdminDashboard:
             "identity_mode_distribution": identity_dist,
             "bias_detection": {
                 "alerts_last_24h": self.get_bias_alerts_last_24h(),
-                "false_positives": 2,
-                "accuracy_rate": "94%",
-                "most_common_bias": "similarity_bias",
+                "false_positives": 2, # Placeholder
+                "accuracy_rate": "94%", # Placeholder
+                "most_common_bias": "similarity_bias", # Placeholder
             },
         }
 
+    @dashboard_cache(ttl_seconds=600)
     def get_identity_mode_analytics(self) -> Dict:
         """Detailed analytics by identity mode"""
         return {
@@ -170,16 +206,36 @@ class EternitySchoolAdminDashboard:
     # Helper methods
     def get_active_survey_count(self) -> int:
         """Get count of active surveys"""
-        # Query surveys table
-        return 5  # Placeholder
+        try:
+            return self.db.query(Survey).filter(Survey.status == 'active').count()
+        except Exception:
+            return 0
 
     def get_response_rate(self) -> float:
         """Get overall response rate"""
-        return 78.5  # Placeholder
+        try:
+            total_assignments = self.db.query(Assignment).count()
+            if total_assignments == 0:
+                return 0.0
+            
+            completed_evaluations = (
+                self.db.query(Evaluation)
+                .filter(Evaluation.status == 'submitted')
+                .count()
+            )
+            
+            return round((completed_evaluations / total_assignments) * 100, 1)
+        except Exception:
+            return 0.0
 
     def get_active_bias_alerts(self) -> int:
         """Get count of active bias alerts"""
-        return 12  # Placeholder
+        try:
+            return self.db.query(VarianceAlert).filter(
+                VarianceAlert.acknowledged == False
+            ).count()
+        except Exception:
+            return 0
 
     def get_fairness_score(self) -> float:
         """Get overall fairness score"""
@@ -187,7 +243,10 @@ class EternitySchoolAdminDashboard:
 
     def get_active_user_count(self) -> int:
         """Get count of active users"""
-        return self.db.query(Person).filter(Person.active == True).count()
+        try:
+            return self.db.query(Person).filter(Person.active == True).count()
+        except Exception:
+            return 0
 
     def get_surveys_in_progress(self) -> int:
         """Get count of surveys in progress"""
@@ -233,43 +292,85 @@ class EternitySchoolAdminDashboard:
 
     def get_bias_alerts_last_24h(self) -> int:
         """Get bias alerts in last 24 hours"""
-        return 12  # Placeholder
+        try:
+            return self.db.query(VarianceAlert).filter(
+                VarianceAlert.created_at >= datetime.utcnow() - timedelta(hours=24)
+            ).count()
+        except Exception:
+            return 0
 
     def get_departmental_identity_patterns(self) -> Dict:
         """Get identity patterns by department"""
-        return {}  # Placeholder
+        # Placeholder - requires complex aggregation
+        return {} 
 
     def get_temporal_identity_patterns(self) -> Dict:
         """Get temporal patterns in identity mode selection"""
-        return {}  # Placeholder
+        # Placeholder
+        return {} 
 
     def get_predictive_identity_insights(self) -> List[Dict]:
         """Get predictive insights about identity modes"""
-        return []  # Placeholder
+        # Placeholder - requires ML model integration
+        return [] 
 
     def get_total_bias_alerts(self) -> int:
         """Get total bias alerts"""
-        return 25  # Placeholder
+        try:
+            return self.db.query(VarianceAlert).count()
+        except Exception:
+            return 0
 
     def get_resolved_bias_alerts(self) -> int:
         """Get resolved bias alerts"""
-        return 13  # Placeholder
+        try:
+            return self.db.query(VarianceAlert).filter(
+                VarianceAlert.acknowledged == True
+            ).count()
+        except Exception:
+            return 0
 
     def get_pending_bias_alerts(self) -> int:
         """Get pending bias alerts"""
-        return 12  # Placeholder
+        try:
+            return self.db.query(VarianceAlert).filter(
+                VarianceAlert.acknowledged == False
+            ).count()
+        except Exception:
+            return 0
 
     def get_bias_types_breakdown(self) -> Dict:
         """Get breakdown by bias type"""
-        return {"similarity_bias": 5, "recency_bias": 3, "departmental_bias": 2, "personal_bias": 2}
+        try:
+            results = (
+                self.db.query(VarianceAlert.alert_type, func.count(VarianceAlert.id))
+                .group_by(VarianceAlert.alert_type)
+                .all()
+            )
+            return {r[0]: r[1] for r in results}
+        except Exception:
+            return {}
 
     def get_fairness_trend(self) -> str:
         """Get fairness trend"""
-        return "improving"
+        return "stable" # Placeholder until we have historical data
 
     def get_survey_status_overview(self) -> Dict:
         """Get survey status overview"""
-        return {"active": 5, "draft": 2, "closed": 10, "scheduled": 3}
+        try:
+            results = (
+                self.db.query(Survey.status, func.count(Survey.id))
+                .group_by(Survey.status)
+                .all()
+            )
+            data = {r[0]: r[1] for r in results}
+            # Ensure defaults
+            for status in ['active', 'draft', 'closed', 'archived']:
+                if status not in data:
+                    data[status] = 0
+            return data
+        except Exception:
+            return {"active": 0, "draft": 0, "closed": 0}
 
     def get_response_timeline(self) -> List[Dict]:
         """Get response timeline data"""

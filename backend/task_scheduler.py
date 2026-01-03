@@ -80,7 +80,44 @@ class TaskScheduler:
             replace_existing=True,
         )
 
+        # Run sanity checks daily at 6 AM
+        self.scheduler.add_job(
+            self.run_sanity_checks,
+            trigger=CronTrigger(hour=6, minute=0),
+            id="daily_sanity_checks",
+            replace_existing=True,
+        )
+
         logger.info("Daily tasks scheduled")
+
+    def run_sanity_checks(self):
+        """Run system sanity checks and log anomalies"""
+        try:
+            with get_db_session() as db:
+                # 1. Check for Active Cycles without Assignments
+                active_cycles = db.query(Cycle).filter(Cycle.status == "active").all()
+                for cycle in active_cycles:
+                    assignment_count = db.query(Assignment).filter(Assignment.cycle_id == cycle.id).count()
+                    if assignment_count == 0:
+                        logger.warning(f"SANITY CHECK FAILED: Active cycle {cycle.id} ({cycle.name}) has NO assignments.")
+
+                # 2. Check for EOM Cycles without Nominees
+                active_eom = (
+                    db.query(EOMCycle)
+                    .join(Cycle)
+                    .filter(Cycle.status == "active", EOMCycle.status == "active")
+                    .all()
+                )
+                for eom in active_eom:
+                    nominee_count = (
+                        db.query(EOMNominee).filter(EOMNominee.eom_cycle_id == eom.id).count()
+                    )
+                    if nominee_count == 0:
+                        logger.warning(f"SANITY CHECK FAILED: Active EOM cycle {eom.id} has NO nominees.")
+
+                logger.info("Daily sanity checks completed")
+        except Exception as e:
+            logger.error(f"Error in run_sanity_checks: {str(e)}")
 
     def send_daily_smart_reminders(self):
         """Send smart reminders for active cycles"""

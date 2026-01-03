@@ -90,9 +90,33 @@ const MREEvaluation = () => {
       return
     }
 
+    // Calculate overall rating (0-100 based on weights)
+    let totalWeightedScore = 0
+    let totalWeight = 0
+    
+    domains.forEach(domain => {
+      // Skip self-evaluation for total score if it shouldn't count (usually it doesn't)
+      if (domain.code === 'self_evaluation') return
+      
+      const score = scores[domain.code] || 0
+      const weight = domain.weight
+      totalWeightedScore += score * weight
+      totalWeight += weight
+    })
+    
+    // Normalize to 0-100 if weights don't sum to 100 (they should, but be safe)
+    const normalizedScore100 = totalWeight > 0 ? (totalWeightedScore / totalWeight) * 100 : 0
+    
+    // Convert 0-100 scale to 1-5 scale for backend
+    // 0-20 -> 1, 20-40 -> 2, etc. OR linear mapping
+    // Linear: 100 -> 5, 0 -> 0. But backend requires >= 1.0
+    // Let's use: max(1.0, score / 20)
+    const rating1to5 = Math.max(1.0, Math.min(5.0, normalizedScore100 / 20))
+
     try {
       await submitEvaluation({
         assignment_id: selectedAssignment.id,
+        rating: rating1to5, // Calculated overall rating
         domain_scores: scores,
         status: 'submitted',
       })

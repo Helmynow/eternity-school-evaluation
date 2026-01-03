@@ -44,7 +44,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 seconds - reduced to fail faster
+  timeout: 30000, // 30 seconds - increased for reports/heavy operations
 })
 
 // Performance tracking is handled in interceptors below

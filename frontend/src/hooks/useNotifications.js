@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { apiClient } from '../lib/api'
+import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import toast from 'react-hot-toast'
 
@@ -8,6 +9,42 @@ export const useNotifications = (autoFetch = true) => {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
+
+  // Real-time subscription for notifications
+  useEffect(() => {
+    if (!user?.email) return
+
+    // Subscribe to new notifications for this user
+    const channel = supabase
+      .channel(`notifications:${user.email}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_email=eq.${user.email}`,
+        },
+        (payload) => {
+          const newNotification = payload.new
+          
+          // Add to list immediately
+          setNotifications((prev) => [newNotification, ...prev])
+          setUnreadCount((prev) => prev + 1)
+          
+          // Show toast
+          toast(newNotification.message, {
+            icon: '🔔',
+            duration: 5000,
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.email])
 
   // Fetch all notifications
   const fetchNotifications = useCallback(async () => {

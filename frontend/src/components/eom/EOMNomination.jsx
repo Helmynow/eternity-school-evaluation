@@ -63,8 +63,15 @@ const EOMNomination = ({ mode = 'nominate' }) => {
 
   useEffect(() => {
     if (currentCycleData && currentCycleData.id) {
-      setCurrentCycle(currentCycleData)
-      loadEligibleNominees(currentCycleData.id)
+      // Only proceed if cycle is actually active
+      if (currentCycleData.status === 'active') {
+        setCurrentCycle(currentCycleData)
+        loadEligibleNominees(currentCycleData.id)
+      } else {
+        // Handle case where cycle exists but is closed/draft
+        console.warn('Current cycle is not active:', currentCycleData.status)
+        setCurrentCycle(null)
+      }
     } else if (!cycleLoading && currentCycleData === null) {
       // No cycle available - handle gracefully
       setCurrentCycle(null)

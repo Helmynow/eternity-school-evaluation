@@ -835,7 +835,8 @@ async def submit_eom_vote(vote: EOMVoteRequest, request: Request, db: Session = 
         if not nominee:
             raise HTTPException(status_code=404, detail="Nominee not found for this EOM cycle")
 
-        nominee.votes_received = int(nominee.votes_received or 0) + 1
+        # Atomic update to prevent race conditions
+        nominee.votes_received = EOMNominee.votes_received + 1
 
         vote_record = EOMVoter(eom_cycle_id=resolved_eom_cycle_id, voter_email=voter_email)
         db.add(vote_record)
