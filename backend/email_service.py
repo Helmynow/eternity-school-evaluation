@@ -7,13 +7,14 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 
 class EmailService:
-    """Service for sending email notifications"""
+    """Service for sending email notifications using Jinja2 templates"""
 
     def __init__(self):
         # Resend SMTP Configuration
@@ -23,13 +24,32 @@ class EmailService:
         # Never hardcode secrets. If SMTP_PASSWORD is not set, sending will be disabled/fail safely.
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
         self.from_email = os.getenv("FROM_EMAIL", "noreply@eternityschoolegypt.com")
+        
+        # Base URL for links (frontend URL)
+        self.app_url = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
+
         # Enable email sending if explicitly enabled OR if SMTP is configured.
-        # This avoids "configured SMTP but forgot EMAIL_ENABLED" footguns.
         enabled_env = os.getenv("EMAIL_ENABLED")
         if enabled_env is None:
             self.enabled = bool(self.smtp_password)
         else:
             self.enabled = enabled_env.lower() == "true"
+
+        # Initialize Jinja2 Environment
+        template_dir = Path(__file__).parent / "templates" / "email"
+        self.env = Environment(
+            loader=FileSystemLoader(str(template_dir)),
+            autoescape=select_autoescape(["html", "xml"])
+        )
+
+    def _render_template(self, template_name: str, context: Dict[str, Any]) -> str:
+        """Render a Jinja2 template"""
+        try:
+            template = self.env.get_template(template_name)
+            return template.render(**context)
+        except Exception as e:
+            print(f"Error rendering template {template_name}: {e}")
+            return ""
 
     def send_email(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
         """Send an email"""
@@ -49,7 +69,9 @@ class EmailService:
 
             if text_body:
                 msg.attach(MIMEText(text_body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
+            
+            if html_body:
+                msg.attach(MIMEText(html_body, "html"))
 
             # Use SSL for port 465, TLS for port 587
             if self.smtp_port == 465:
@@ -70,24 +92,12 @@ class EmailService:
     def send_winner_notification(self, winner_email: str, winner_name: str, category: str, cycle_name: str) -> bool:
         """Send notification to EOM winner"""
         subject = f"🎉 Congratulations! You are the Employee of the Month - {category}"
-
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #094773;">🎉 Congratulations, {winner_name}!</h1>
-                <p>We are thrilled to inform you that you have been selected as the <strong>Employee of the Month</strong> in the <strong>{category}</strong> category for <strong>{cycle_name}</strong>.</p>
-                <p>Your dedication, hard work, and commitment to excellence have been recognized by your colleagues and leadership team.</p>
-                <div style="background-color: #E5F6DF; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 0;"><strong>Category:</strong> {category}</p>
-                    <p style="margin: 5px 0;"><strong>Cycle:</strong> {cycle_name}</p>
-                </div>
-                <p>Thank you for your outstanding contribution to Eternity School of Egypt!</p>
-                <p>Best regards,<br>Eternity School Evaluation Team</p>
-            </div>
-        </body>
-        </html>
-        """
+        
+        html_body = self._render_template("winner_notification.html", {
+            "winner_name": winner_name,
+            "category": category,
+            "cycle_name": cycle_name
+        })
 
         return self.send_email(winner_email, subject, html_body)
 
@@ -96,25 +106,13 @@ class EmailService:
     ) -> bool:
         """Send notification to voters"""
         subject = f"🗳️ EOM Voting Open - {cycle_name}"
-
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #094773;">EOM Voting is Now Open</h1>
-                <p>Dear {voter_name},</p>
-                <p>The Employee of the Month voting for <strong>{cycle_name}</strong> is now open.</p>
-                <p>Please log in to the EVALVision system to cast your vote.</p>
-                {f'<p><strong>Voting Deadline:</strong> {voting_deadline}</p>' if voting_deadline else ''}
-                <div style="background-color: #E5F6DF; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
-                    <a href="http://localhost:3000/eom/vote" style="background-color: #2C5B4C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Cast Your Vote</a>
-                </div>
-                <p>Thank you for your participation!</p>
-                <p>Best regards,<br>Eternity School Evaluation Team</p>
-            </div>
-        </body>
-        </html>
-        """
+        
+        html_body = self._render_template("voter_notification.html", {
+            "voter_name": voter_name,
+            "cycle_name": cycle_name,
+            "voting_deadline": voting_deadline,
+            "action_url": f"{self.app_url}/eom/vote"
+        })
 
         return self.send_email(voter_email, subject, html_body)
 
@@ -123,24 +121,14 @@ class EmailService:
     ) -> bool:
         """Send notification to evaluators"""
         subject = f"📝 Evaluation Reminder - {cycle_name}"
-
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #094773;">Evaluation Reminder</h1>
-                <p>Dear {evaluator_name},</p>
-                <p>This is a reminder that you have a pending evaluation for <strong>{target_name}</strong> in the <strong>{cycle_name}</strong> cycle.</p>
-                {f'<p><strong>Deadline:</strong> {deadline}</p>' if deadline else ''}
-                <div style="background-color: #E5F6DF; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
-                    <a href="http://localhost:3000/mre/evaluate" style="background-color: #094773; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Evaluation</a>
-                </div>
-                <p>Thank you for your timely completion of evaluations!</p>
-                <p>Best regards,<br>Eternity School Evaluation Team</p>
-            </div>
-        </body>
-        </html>
-        """
+        
+        html_body = self._render_template("evaluator_notification.html", {
+            "evaluator_name": evaluator_name,
+            "target_name": target_name,
+            "cycle_name": cycle_name,
+            "deadline": deadline,
+            "action_url": f"{self.app_url}/mre/evaluate"
+        })
 
         return self.send_email(evaluator_email, subject, html_body)
 
@@ -149,27 +137,29 @@ class EmailService:
     ) -> bool:
         """Send notification about an objection"""
         subject = f"⚠️ Objection Submitted - EOM Nomination"
-
-        html_body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #C88167;">Objection Submitted</h1>
-                <p>An objection has been submitted regarding an EOM nomination.</p>
-                <div style="background-color: #F8F0E8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p><strong>Objector:</strong> {objector_name}</p>
-                    <p><strong>Nominee:</strong> {nominee_name}</p>
-                    <p><strong>Cycle:</strong> {cycle_name}</p>
-                    <p><strong>Reason:</strong></p>
-                    <p style="background-color: white; padding: 10px; border-left: 3px solid #C88167;">{reason}</p>
-                </div>
-                <p>Please review this objection in the admin panel.</p>
-                <div style="background-color: #E5F6DF; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center;">
-                    <a href="http://localhost:3000/admin/objections" style="background-color: #2C5B4C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Review Objection</a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        
+        html_body = self._render_template("objection_notification.html", {
+            "objector_name": objector_name,
+            "nominee_name": nominee_name,
+            "reason": reason,
+            "cycle_name": cycle_name,
+            "action_url": f"{self.app_url}/admin/objections"
+        })
 
         return self.send_email(admin_email, subject, html_body)
+
+    def send_survey_invitation(
+        self, user_email: str, user_name: str, survey_title: str, estimated_time: str, identity_mode: str, survey_id: int
+    ) -> bool:
+        """Send invitation to participate in a survey"""
+        subject = f"📊 Invitation: {survey_title}"
+        
+        html_body = self._render_template("survey_invitation.html", {
+            "user_name": user_name,
+            "survey_title": survey_title,
+            "estimated_time": estimated_time,
+            "identity_mode": identity_mode,
+            "action_url": f"{self.app_url}/survey/{survey_id}"
+        })
+
+        return self.send_email(user_email, subject, html_body)

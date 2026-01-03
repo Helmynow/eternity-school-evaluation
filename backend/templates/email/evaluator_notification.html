@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { color: #094773; text-align: center; }
+        .content { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .highlight-box { background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }
+        .action-box { text-align: center; margin: 25px 0; }
+        .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+        .button { background-color: #094773; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Evaluation Reminder</h1>
+        </div>
+        <div class="content">
+            <p>Dear {{ evaluator_name }},</p>
+            <p>This is a reminder regarding your pending evaluation for <strong>{{ target_name }}</strong> for the <strong>{{ cycle_name }}</strong> cycle.</p>
+            
+            {% if deadline %}
+            <div class="highlight-box">
+                <p style="margin: 0;"><strong>Deadline:</strong> {{ deadline }}</p>
+            </div>
+            {% endif %}
+
+            <p>Timely evaluations are crucial for providing meaningful feedback to your colleagues. Please complete this as soon as possible.</p>
+
+            <div class="action-box">
+                <a href="{{ action_url }}" class="button">Complete Evaluation</a>
+            </div>
+            
+            <p>Thank you for your commitment to our professional growth process.</p>
+            
+            <p>Best regards,<br>Eternity School Evaluation Team</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2024 Eternity School of Egypt. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

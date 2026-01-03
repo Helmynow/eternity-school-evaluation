@@ -58,6 +58,7 @@ class EternitySchoolSurveyTemplates:
             "inter_departmental": self.get_interdepartmental_section(identity_mode),
             "personal_wellbeing": self.get_personal_wellbeing_section(identity_mode),
             "school_improvement": self.get_improvement_section(identity_mode),
+            "teacher_feedback": self.get_teacher_feedback_section(identity_mode),
         }
 
         # Add identity-specific sections
@@ -368,6 +369,48 @@ class EternitySchoolSurveyTemplates:
             ],
         }
 
+    def get_teacher_feedback_section(self, identity_mode: str) -> Dict:
+        """Teacher-specific feedback (Student/Peer to Teacher)"""
+        return {
+            "section_id": "teacher_feedback",
+            "title": "Teaching & Learning Environment",
+            "description": "Feedback on teaching effectiveness and classroom environment",
+            "questions": [
+                {
+                    "id": "teaching_clarity_001",
+                    "text": "How clearly do teachers explain concepts and learning objectives?",
+                    "type": "rating_scale",
+                    "scale": ["Not Clear", "Slightly Clear", "Moderately Clear", "Clear", "Very Clear"],
+                    "category": "teaching_effectiveness",
+                    "required": True,
+                },
+                {
+                    "id": "student_engagement_001",
+                    "text": "How effectively do teachers engage students in the learning process?",
+                    "type": "rating_scale",
+                    "scale": ["Ineffective", "Slightly Effective", "Moderately Effective", "Effective", "Very Effective"],
+                    "category": "student_engagement",
+                    "required": True,
+                },
+                {
+                    "id": "classroom_mgmt_001",
+                    "text": "How well is classroom behavior managed to support learning?",
+                    "type": "rating_scale",
+                    "scale": ["Poorly", "Fairly", "Adequately", "Well", "Very Well"],
+                    "category": "classroom_management",
+                    "required": True,
+                },
+                {
+                    "id": "resources_001",
+                    "text": "Are sufficient learning resources available for students?",
+                    "type": "yes_no_details",
+                    "category": "resources",
+                    "details_prompt": "What additional resources would be helpful?",
+                    "required": True,
+                }
+            ],
+        }
+
     def get_sensitive_topics_section(self) -> Dict:
         """Sensitive topics section (anonymous only)"""
         return {
@@ -468,6 +511,7 @@ class EternitySchoolSurveyTemplates:
             "inter_departmental": self.get_interdepartmental_section,
             "personal_wellbeing": self.get_personal_wellbeing_section,
             "school_improvement": self.get_improvement_section,
+            "teacher_feedback": self.get_teacher_feedback_section,
         }
 
         template_func = templates.get(category)

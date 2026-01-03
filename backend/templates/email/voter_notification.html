@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { color: #094773; text-align: center; }
+        .content { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .action-box { background-color: #E5F6DF; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center; }
+        .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+        .button { background-color: #2C5B4C; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗳️ EOM Voting is Now Open</h1>
+        </div>
+        <div class="content">
+            <p>Dear {{ voter_name }},</p>
+            <p>The Employee of the Month (EOM) voting period for <strong>{{ cycle_name }}</strong> is now officially open.</p>
+            
+            <p>Your voice matters! Please take a moment to recognize your colleagues who have demonstrated exceptional dedication and performance.</p>
+            
+            {% if voting_deadline %}
+            <p><strong>Voting Deadline:</strong> {{ voting_deadline }}</p>
+            {% endif %}
+
+            <div class="action-box">
+                <a href="{{ action_url }}" class="button">Cast Your Vote</a>
+            </div>
+            
+            <p>Thank you for participating in our recognition program.</p>
+            
+            <p>Best regards,<br>Eternity School Evaluation Team</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2024 Eternity School of Egypt. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
