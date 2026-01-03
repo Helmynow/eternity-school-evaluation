@@ -137,7 +137,7 @@ const SmartNomineeSearch = ({
           className="w-full px-4 py-3 pl-10 border border-ese-accent-beige rounded-lg focus:ring-2 focus:ring-ese-lang-500 focus:border-ese-lang-500 outline-none"
         />
         <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-          <img src="/assets/icons/search.png" alt="" className="w-5 h-5" />
+          <img src="/assets/icons/search.svg" alt="" className="w-5 h-5" />
         </div>
         {value && (
           <button
@@ -145,7 +145,7 @@ const SmartNomineeSearch = ({
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ese-ink-blue hover:text-ese-ink-navy"
             title="Clear selection"
           >
-            <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
+            <img src="/assets/icons/x.svg" alt="" className="w-5 h-5" />
           </button>
         )}
       </div>

@@ -31,6 +31,8 @@ instance/
 .env
 .env.local
 .env.production.local
+.env.backup
+.env.direct_backup
 
 # IDE
 .vscode/

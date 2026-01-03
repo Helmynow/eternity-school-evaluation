@@ -88,9 +88,9 @@ const IntegrationHub = () => {
   }
 
   const tabs = [
-    { id: 'status', label: 'Integration Status', icon: '/assets/icons/Analytics.png' },
-    { id: 'setup', label: 'HR Setup', icon: '/assets/icons/change.png' },
-    { id: 'sync', label: 'Sync History', icon: '/assets/icons/sync.png' },
+    { id: 'status', label: 'Integration Status', icon: '/assets/icons/analytics.svg' },
+    { id: 'setup', label: 'HR Setup', icon: '/assets/icons/refresh.svg' },
+    { id: 'sync', label: 'Sync History', icon: '/assets/icons/refresh.svg' },
   ]
 
   return (

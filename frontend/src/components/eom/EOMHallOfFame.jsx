@@ -64,7 +64,7 @@ const EOMHallOfFame = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-heading font-bold text-ese-ink-navy mb-2">
           <span className="flex items-center gap-2">
-            <img src="/assets/icons/trophy.png" alt="Trophy" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none' }} />
+            <img src="/assets/icons/excellence.svg" alt="Trophy" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none' }} />
             Hall of Fame
           </span>
         </h1>

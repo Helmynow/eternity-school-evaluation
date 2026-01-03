@@ -11,35 +11,35 @@ const EOM_CATEGORIES = [
     name: 'Outstanding Leadership',
     description: 'Leads projects successfully, models professionalism and ethics, volunteers for high-stakes responsibilities',
     example: 'Led digital attendance reform, trained peers on new process',
-    icon: '/assets/icons/leadership.png',
+    icon: '/assets/icons/leadership.svg',
   },
   {
     id: 'team_spirit',
     name: 'Team Spirit',
     description: 'Uplifts team morale, resolves conflict through positive action, consistently helps peers beyond duty',
     example: 'Organised peer tutoring among teachers and eased inter-department tension',
-    icon: '/assets/icons/team_spirit.png',
+    icon: '/assets/icons/team.svg',
   },
   {
     id: 'innovation',
     name: 'Innovation',
     description: 'Suggests or implements solutions with impact, creates or improves systems/processes, shares tools or strategies',
     example: 'Developed a student feedback dashboard for the lesson plan',
-    icon: '/assets/icons/innovation.png',
+    icon: '/assets/icons/innovation.svg',
   },
   {
     id: 'rising_star',
     name: 'Rising Star',
     description: 'New to the school (first 6 months), quickly adapts and exceeds expectations, shows eagerness and initiative',
     example: 'Reworked an entire classroom setup within two weeks of hire',
-    icon: '/assets/icons/rising_star.png',
+    icon: '/assets/icons/star.svg',
   },
   {
     id: 'service_excellence',
     name: 'Service Excellence',
     description: 'Punctual, dependable, consistent output, maintains high standard across months, manages responsibilities with minimal supervision',
     example: 'Zero late marks, submits reports early, no task reminders needed',
-    icon: '/assets/icons/trophy.png',
+    icon: '/assets/icons/excellence.svg',
   },
 ]
 
@@ -297,7 +297,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-ese-ink-navy mb-2 flex items-center gap-2">
-                    <img src="/assets/icons/search.png" alt="Search" className="w-5 h-5" />
+                    <img src="/assets/icons/search.svg" alt="Search" className="w-5 h-5" />
                     Search Nominations
                   </label>
                   <div className="relative">
@@ -309,7 +309,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                       className="w-full px-4 py-3 pl-10 border border-ese-accent-beige rounded-lg focus:ring-2 focus:ring-ese-lang-500 focus:border-ese-lang-500 outline-none"
                     />
                     <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                      <img src="/assets/icons/search.png" alt="" className="w-5 h-5" />
+                      <img src="/assets/icons/search.svg" alt="" className="w-5 h-5" />
                     </div>
                     {voteSearchQuery && (
                       <button
@@ -317,7 +317,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ese-ink-blue hover:text-ese-ink-navy"
                         aria-label="Clear search"
                       >
-                        <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
+                        <img src="/assets/icons/x.svg" alt="" className="w-5 h-5" />
                       </button>
                     )}
                   </div>
@@ -424,7 +424,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                           className="px-4 py-2 bg-ese-accent-terracotta text-white rounded-lg hover:opacity-90 text-sm flex items-center justify-center"
                           title="Object to this nomination"
                         >
-                          <img src="/assets/icons/objection-warning.png" alt="Object" className="w-5 h-5" />
+                          <img src="/assets/icons/alert.svg" alt="Object" className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -537,9 +537,9 @@ const EOMNomination = ({ mode = 'nominate' }) => {
           <div className="flex items-center gap-3">
             <span className="text-2xl">
               {windowStatus.is_within_window ? (
-                <img src="/assets/icons/success.png" alt="Open" className="w-6 h-6 inline" onError={(e) => { e.target.outerHTML = '✅' }} />
+                <img src="/assets/icons/approved.svg" alt="Open" className="w-6 h-6 inline" onError={(e) => { e.target.outerHTML = '✅' }} />
               ) : (
-                <img src="/assets/icons/time_task.png" alt="Closed" className="w-6 h-6 inline" onError={(e) => { e.target.outerHTML = '⏰' }} />
+                <img src="/assets/icons/time.svg" alt="Closed" className="w-6 h-6 inline" onError={(e) => { e.target.outerHTML = '⏰' }} />
               )}
             </span>
             <div className="flex-1">
@@ -629,7 +629,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                   )}
                   {eligibleNominees.length > 0 && (
                     <p className="text-xs text-ese-ink-blue mt-2 flex items-center gap-1">
-                      <img src="/assets/icons/innovation.png" alt="Tip" className="w-4 h-4" onError={(e) => e.target.style.display = 'none'} />
+                      <img src="/assets/icons/innovation.svg" alt="Tip" className="w-4 h-4" onError={(e) => e.target.style.display = 'none'} />
                       Tip: Type to search, or use filters to narrow down by department, role, or segment
                     </p>
                   )}
@@ -657,7 +657,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-ese-ink-navy mb-1">
-                            <img src="/assets/icons/innovation.png" alt="AI" className="w-4 h-4 inline mr-1" onError={(e) => e.target.style.display = 'none'} /> AI Suggestion: {suggestedCategory.recommended_category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            <img src="/assets/icons/innovation.svg" alt="AI" className="w-4 h-4 inline mr-1" onError={(e) => e.target.style.display = 'none'} /> AI Suggestion: {suggestedCategory.recommended_category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
                           <p className="text-xs text-ese-ink-blue mb-2">
                             Confidence: {Math.round(suggestedCategory.confidence_score * 100)}%

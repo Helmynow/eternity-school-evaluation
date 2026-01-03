@@ -163,7 +163,7 @@ const StaffManagement = () => {
             onClick={() => setShowBulkUpload(true)}
             className="ese-button-secondary"
           >
-            <img src="/assets/icons/upload.png" alt="Upload" className="w-5 h-5 inline mr-2" />
+            <img src="/assets/icons/upload.svg" alt="Upload" className="w-5 h-5 inline mr-2" />
             Bulk Upload
           </button>
           <button

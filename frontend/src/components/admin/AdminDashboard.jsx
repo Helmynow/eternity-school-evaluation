@@ -54,11 +54,11 @@ const AdminDashboard = () => {
   }
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: '/assets/icons/Analytics.png' },
-    { id: 'metrics', label: 'System Metrics', icon: '/assets/icons/metrics.png' },
-    { id: 'identity', label: 'Identity Analytics', icon: '/assets/icons/identity.png' },
-    { id: 'bias', label: 'Bias Alerts', icon: '/assets/icons/warning_alert.png' },
-    { id: 'actions', label: 'Action Items', icon: '/assets/icons/success.png' },
+    { id: 'overview', label: 'Overview', icon: '/assets/icons/analytics.svg' },
+    { id: 'metrics', label: 'System Metrics', icon: '/assets/icons/data.svg' },
+    { id: 'identity', label: 'Identity Analytics', icon: '/assets/icons/shield.svg' },
+    { id: 'bias', label: 'Bias Alerts', icon: '/assets/icons/warning.svg' },
+    { id: 'actions', label: 'Action Items', icon: '/assets/icons/approved.svg' },
   ]
 
   if (loading && !dashboard) {

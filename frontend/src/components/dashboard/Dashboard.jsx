@@ -139,7 +139,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-accent-mustard/20 flex items-center justify-center">
-                    <img src="/assets/icons/rising_star.png" alt="Star" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">⭐</span>' }} />
+                    <img src="/assets/icons/star.svg" alt="Star" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">⭐</span>' }} />
                   </div>
                 </div>
               </div>
@@ -153,7 +153,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-accent-terracotta/20 flex items-center justify-center">
-                    <img src="/assets/icons/vote.png" alt="Vote" className="w-8 h-8" onError={(e) => { e.target.outerHTML = '<span className="text-2xl">🗳️</span>' }} />
+                    <img src="/assets/icons/vote.svg" alt="Vote" className="w-8 h-8" onError={(e) => { e.target.outerHTML = '<span className="text-2xl">🗳️</span>' }} />
                   </div>
                 </div>
               </div>
@@ -167,7 +167,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-full bg-ese-lang-200 flex items-center justify-center">
-                    <img src="/assets/icons/document.png" alt="Document" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">📝</span>' }} />
+                    <img src="/assets/icons/documents.svg" alt="Document" className="w-8 h-8" onError={(e) => { e.target.style.display = 'none'; e.target.outerHTML = '<span className="text-2xl">📝</span>' }} />
                   </div>
                 </div>
               </div>

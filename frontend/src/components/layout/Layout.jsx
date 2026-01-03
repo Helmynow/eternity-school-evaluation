@@ -42,20 +42,20 @@ const Layout = ({ children }) => {
     {
       path: '/',
       label: 'Dashboard',
-      icon: '/assets/icons/dashboard.png',
+      icon: '/assets/icons/dashboard.svg',
       roles: ['ceo', 'pnc', 'department_head', 'staff'],
       isDashboard: true,
     },
     {
       path: '/survey',
       label: 'Survey',
-      icon: '/assets/icons/assessment.png',
+      icon: '/assets/icons/assessments.svg',
       roles: ['ceo', 'pnc', 'department_head', 'staff'],
     },
     {
       path: '/mre/evaluate',
       label: 'MRE Evaluate',
-      icon: '/assets/icons/assessment.png',
+      icon: '/assets/icons/assessments.svg',
       roles: ['ceo', 'pnc', 'department_head', 'staff'],
     },
   ]
@@ -64,49 +64,49 @@ const Layout = ({ children }) => {
     { 
       path: '/admin/dashboard', 
       label: 'Admin Dashboard', 
-      icon: '/assets/icons/Analytics.png', 
+      icon: '/assets/icons/analytics.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/cycles', 
       label: 'Cycles', 
-      icon: '/assets/icons/calander.png', 
+      icon: '/assets/icons/calendar.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/staff', 
       label: 'Staff', 
-      icon: '/assets/icons/users.png', 
+      icon: '/assets/icons/users.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/objections', 
       label: 'Objections', 
-      icon: '/assets/icons/warning_alert.png', 
+      icon: '/assets/icons/warning.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/announcements', 
       label: 'Announcements', 
-      icon: '/assets/icons/notification.png', 
+      icon: '/assets/icons/notifications.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/import', 
       label: 'Import', 
-      icon: '/assets/icons/upload.png', 
+      icon: '/assets/icons/upload.svg', 
       roles: ['ceo', 'pnc'] 
     },
     { 
       path: '/admin/integration', 
       label: 'Integration', 
-      icon: '/assets/icons/communication.png', 
+      icon: '/assets/icons/communication.svg', 
       roles: ['ceo'] 
     },
     { 
       path: '/admin/settings', 
       label: 'Settings', 
-      icon: '/assets/icons/change.png', 
+      icon: '/assets/icons/refresh.svg', 
       roles: ['ceo'] 
     },
   ]
@@ -115,13 +115,13 @@ const Layout = ({ children }) => {
     {
       path: '/eom/nominate',
       label: 'EOM Nominate',
-      icon: '/assets/icons/announcments.png',
+      icon: '/assets/icons/announcements.svg',
       roles: ['ceo', 'pnc', 'department_head'],
     },
     {
       path: '/eom/vote',
       label: 'EOM Vote',
-      icon: '/assets/icons/vote.png',
+      icon: '/assets/icons/vote.svg',
       roles: ['ceo', 'pnc', 'department_head'],
     },
   ]
@@ -130,19 +130,19 @@ const Layout = ({ children }) => {
     { 
       path: '/reports', 
       label: 'Reports', 
-      icon: '/assets/icons/Analytics.png', 
+      icon: '/assets/icons/analytics.svg', 
       roles: ['ceo', 'pnc', 'department_head', 'staff'] 
     },
     { 
       path: '/history', 
       label: 'History', 
-      icon: '/assets/icons/review.png', 
+      icon: '/assets/icons/report.svg', 
       roles: ['ceo', 'pnc', 'department_head', 'staff'] 
     },
     { 
       path: '/notifications', 
       label: 'Notifications', 
-      icon: '/assets/icons/notification.png', 
+      icon: '/assets/icons/notifications.svg', 
       roles: ['ceo', 'pnc', 'department_head', 'staff'] 
     },
   ]
@@ -150,25 +150,25 @@ const Layout = ({ children }) => {
     {
       id: 'main',
       label: 'Main',
-      icon: '/assets/icons/dashboard.png',
+      icon: '/assets/icons/dashboard.svg',
       items: filterItemsByRole(mainNavItems),
     },
     {
       id: 'eom',
       label: 'EOM',
-      icon: '/assets/icons/announcments.png',
+      icon: '/assets/icons/announcements.svg',
       items: filterItemsByRole(eomNavItems),
     },
     {
       id: 'tools',
       label: 'Tools',
-      icon: '/assets/icons/Analytics.png',
+      icon: '/assets/icons/analytics.svg',
       items: filterItemsByRole(utilityNavItems),
     },
     {
       id: 'admin',
       label: 'Admin',
-      icon: '/assets/icons/change.png',
+      icon: '/assets/icons/refresh.svg',
       items: filterItemsByRole(adminNavItems),
     },
   ].filter((g) => g.items.length > 0)

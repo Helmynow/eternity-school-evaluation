@@ -36,7 +36,7 @@ class ErrorBoundary extends React.Component {
           <div className="max-w-2xl w-full bg-white rounded-lg shadow-md p-8 border border-red-200">
             <div className="text-center">
               <div className="mb-4">
-                <img src="/assets/icons/warning.png" alt="Error" className="w-16 h-16 mx-auto" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div className="text-6xl mb-4">⚠️</div>' }} />
+                <img src="/assets/icons/warning.svg" alt="Error" className="w-16 h-16 mx-auto" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div className="text-6xl mb-4">⚠️</div>' }} />
               </div>
               <h2 className="text-2xl font-bold text-ese-ink-navy mb-2">
                 Something went wrong

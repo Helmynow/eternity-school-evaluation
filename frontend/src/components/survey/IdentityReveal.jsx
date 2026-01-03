@@ -9,31 +9,31 @@ const REVEAL_METHODS = [
     id: 'full',
     name: 'Full Reveal',
     description: 'Reveal complete identity information',
-    icon: '/assets/icons/reveal_full.png',
+    icon: '/assets/icons/eye.svg',
   },
   {
     id: 'partial_role',
     name: 'Partial - Role Only',
     description: 'Reveal only your role/title',
-    icon: '/assets/icons/reveal_role.png',
+    icon: '/assets/icons/user.svg',
   },
   {
     id: 'partial_department',
     name: 'Partial - Department Only',
     description: 'Reveal only your department',
-    icon: '/assets/icons/reveal_department.png',
+    icon: '/assets/icons/users-group.svg',
   },
   {
     id: 'gradual',
     name: 'Gradual Reveal',
     description: 'Reveal information over time',
-    icon: '/assets/icons/time_task.png',
+    icon: '/assets/icons/time.svg',
   },
   {
     id: 'consent_based',
     name: 'Consent-Based Reveal',
     description: 'Reveal only with explicit consent',
-    icon: '/assets/icons/team_spirit.png',
+    icon: '/assets/icons/team.svg',
   },
 ]
 

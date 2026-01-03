@@ -76,7 +76,7 @@ const AnnouncementBanner = () => {
               className="ml-4 text-ese-ink-medium hover:text-ese-ink-navy"
               aria-label="Dismiss announcement"
             >
-              <img src="/assets/icons/close.png" alt="" className="w-5 h-5" />
+              <img src="/assets/icons/x.svg" alt="" className="w-5 h-5" />
             </button>
           </div>
         </div>

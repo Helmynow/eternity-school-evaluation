@@ -43,7 +43,7 @@ const EOMFeedbackForm = ({ cycleId }) => {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
           <div className="mb-4">
-            <img src="/assets/icons/approved.png" alt="Success" className="w-16 h-16 mx-auto" />
+            <img src="/assets/icons/approved.svg" alt="Success" className="w-16 h-16 mx-auto" />
           </div>
           <h3 className="text-xl font-heading font-semibold text-green-800 mb-2">
             Feedback Submitted Successfully
@@ -130,7 +130,7 @@ const EOMFeedbackForm = ({ cycleId }) => {
                       : 'opacity-30'
                   }`}
                 >
-                  <img src="/assets/icons/rising_star.png" alt={`${star} star`} className="w-8 h-8" onError={(e) => { e.target.outerHTML = '<span className="text-3xl">⭐</span>' }} />
+                  <img src="/assets/icons/star.svg" alt={`${star} star`} className="w-8 h-8" onError={(e) => { e.target.outerHTML = '<span className="text-3xl">⭐</span>' }} />
                 </button>
               ))}
               <span className="ml-4 text-sm text-ese-ink-navy/70">
