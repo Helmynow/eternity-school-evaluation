@@ -1,5 +1,17 @@
 # Production Deployment - Quick Start (ENVIRONMENT=production, REQUIRE_SUPABASE_AUTH=true, SUPABASE_JWT_SECRET=...)
 
+## Important note for Vercel deployments
+
+Vercel Serverless Functions have a **250MB unzipped** size limit. This project’s FastAPI backend includes large binary dependencies (notably `numpy`/`pandas`), which commonly exceed that limit when deployed as a Vercel Python Function.
+
+Recommended production approach:
+
+1) Deploy the **frontend** on Vercel (static).
+2) Deploy the **backend** as a separate service (Docker/container).
+3) Set `VITE_API_URL` in Vercel to point to your backend base URL.
+
+See `README_BACKEND_DEPLOY.md`.
+
 ## 🚀 All Production Features Implemented
 
 ### ✅ Completed Features
