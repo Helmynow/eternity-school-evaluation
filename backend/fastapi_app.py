@@ -409,7 +409,7 @@ _db_instance = Database()
 def get_db():
     """
     Dependency to get database session.
-    
+
     Uses singleton Database instance to prevent connection pool exhaustion.
     Each request gets a session from the shared pool, which is returned
     when the request completes.
@@ -2446,7 +2446,7 @@ async def health_check_simple():
 async def health_check_database():
     """
     Database health check with connection pool status.
-    
+
     Useful for monitoring connection pool utilization during high load
     (e.g., when 200 users are voting/evaluating simultaneously).
     """
@@ -2457,7 +2457,7 @@ async def health_check_database():
 async def health_check_pool():
     """
     Connection pool status for monitoring.
-    
+
     Returns:
     - mode: "serverless" (NullPool) or "persistent" (QueuePool)
     - For persistent mode: size, checkedin, checkedout, overflow counts

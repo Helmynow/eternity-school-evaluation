@@ -71,16 +71,16 @@ Base = declarative_base()
 def _ensure_transaction_mode(database_url: str) -> str:
     """
     Ensure the database URL uses Transaction mode (port 6543) for Supavisor.
-    
+
     Transaction mode is CRITICAL for scalability:
     - Session mode (5432): Holds connection for entire session → limited to pool_size
     - Transaction mode (6543): Releases connection after each query → 200x clients supported
     """
     if not database_url:
         return database_url
-    
+
     parsed = urlparse(database_url)
-    
+
     # Check if this is a Supabase pooler URL
     if "pooler.supabase.com" in (parsed.hostname or ""):
         # Ensure we're using Transaction mode port (6543)
@@ -92,10 +92,10 @@ def _ensure_transaction_mode(database_url: str) -> str:
             # Replace port 5432 with 6543
             netloc = parsed.netloc.replace(":5432", ":6543")
             parsed = parsed._replace(netloc=netloc)
-    
+
     # Note: We handle prepared statements via connect_args (prepare_threshold=0)
     # rather than URL parameters, since pgbouncer=true is Prisma-specific
-    
+
     return urlunparse(parsed)
 
 
@@ -103,22 +103,22 @@ def _add_connection_options(database_url: str) -> str:
     """Add connection options for reliability."""
     if not database_url:
         return database_url
-    
+
     parsed = urlparse(database_url)
     query_params = parse_qs(parsed.query)
-    
+
     # Set connection timeout (how long to wait for a connection)
     if "connect_timeout" not in query_params:
         query_params["connect_timeout"] = ["10"]
-    
+
     # Set statement timeout to prevent long-running queries
     statement_timeout = os.getenv("DB_STATEMENT_TIMEOUT", "30000")
     if "options" not in query_params:
         query_params["options"] = [f"-c statement_timeout={statement_timeout}"]
-    
+
     new_query = urlencode(query_params, doseq=True)
     parsed = parsed._replace(query=new_query)
-    
+
     return urlunparse(parsed)
 
 
@@ -130,10 +130,11 @@ def _add_connection_options(database_url: str) -> str:
 def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float = 10.0):
     """
     Decorator for retrying database operations with exponential backoff.
-    
+
     Handles transient connection errors gracefully, which is essential
     when 200 users might be hitting the database simultaneously.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -144,7 +145,7 @@ def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float =
                 except OperationalError as e:
                     last_exception = e
                     error_msg = str(e).lower()
-                    
+
                     # Retry on connection-related errors
                     retryable_errors = [
                         "connection refused",
@@ -155,9 +156,9 @@ def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float =
                         "server closed",
                         "ssl connection",
                     ]
-                    
+
                     if any(err in error_msg for err in retryable_errors):
-                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay)
                         logger.warning(
                             f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}. "
                             f"Retrying in {delay:.1f}s..."
@@ -170,7 +171,7 @@ def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float =
                     # Check if it's a connection-related error
                     if e.connection_invalidated:
                         last_exception = e
-                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        delay = min(base_delay * (2**attempt), max_delay)
                         logger.warning(
                             f"Connection invalidated (attempt {attempt + 1}/{max_retries}): {e}. "
                             f"Retrying in {delay:.1f}s..."
@@ -178,11 +179,13 @@ def with_retry(max_retries: int = 3, base_delay: float = 0.5, max_delay: float =
                         time.sleep(delay)
                     else:
                         raise
-            
+
             # All retries exhausted
             logger.error(f"All {max_retries} database connection attempts failed")
             raise last_exception
+
         return wrapper
+
     return decorator
 
 
@@ -907,13 +910,13 @@ class HybridIdentitySession(Base):
 class Database:
     """
     Production-ready database connection management for 200+ concurrent users.
-    
+
     Uses singleton pattern to ensure only ONE engine exists for the application.
     Automatically configures for optimal performance based on environment:
-    
+
     - Serverless (Vercel, Lambda): NullPool - no local pooling, Supavisor handles it
     - Persistent (VMs, containers): QueuePool - local pool with conservative limits
-    
+
     IMPORTANT: Use Transaction mode connection string (port 6543) for scalability!
     """
 
@@ -953,7 +956,7 @@ class Database:
         # Optimize URL for Supavisor Transaction mode
         database_url = _ensure_transaction_mode(database_url)
         database_url = _add_connection_options(database_url)
-        
+
         # Detect serverless environment
         Database._is_serverless = (
             os.getenv("DB_SERVERLESS", "").lower() == "true"
@@ -980,12 +983,9 @@ class Database:
             max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
             pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
             pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "300"))  # 5 min recycle
-            
-            logger.info(
-                f"Database configured for PERSISTENT mode (QueuePool: "
-                f"size={pool_size}, overflow={max_overflow})"
-            )
-            
+
+            logger.info(f"Database configured for PERSISTENT mode (QueuePool: " f"size={pool_size}, overflow={max_overflow})")
+
             Database._engine = create_engine(
                 database_url,
                 echo=False,
@@ -1031,7 +1031,7 @@ class Database:
     def session_scope(self) -> Generator[Session, None, None]:
         """
         Provide a transactional scope around a series of operations.
-        
+
         Usage:
             db = Database()
             with db.session_scope() as session:
@@ -1068,10 +1068,10 @@ class Database:
         """Get current connection pool status (useful for monitoring)"""
         if cls._engine is None:
             return {"status": "not_initialized"}
-        
+
         if cls._is_serverless:
             return {"mode": "serverless", "pool": "NullPool"}
-        
+
         pool = cls._engine.pool
         return {
             "mode": "persistent",
@@ -1112,7 +1112,7 @@ def get_db_session(database_url: str = None) -> Session:
 def get_db_context() -> Generator[Session, None, None]:
     """
     Context manager for database sessions with automatic commit/rollback.
-    
+
     Usage:
         with get_db_context() as session:
             session.add(new_object)
@@ -1137,7 +1137,7 @@ def get_database() -> Database:
 def check_database_health() -> dict:
     """
     Check database connectivity and pool health.
-    
+
     Returns a dict with status information, useful for health check endpoints.
     """
     db = Database()
@@ -1157,5 +1157,5 @@ def check_database_health() -> dict:
             "error": str(e),
             "pool": Database.get_pool_status(),
         }
-    
+
     return {"status": "unknown"}
