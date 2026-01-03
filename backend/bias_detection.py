@@ -4,7 +4,9 @@ For Eternity School Evaluation & Recognition System
 """
 
 import logging
-from collections import defaultdict
+import math
+from collections import Counter, defaultdict
+from statistics import NormalDist
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -96,21 +98,108 @@ class BiasDetector:
                     "median": float(np.median(ratings)),
                 }
 
-        # Statistical test for differences
-        if stats is not None and len(ratings_by_context) >= 2:
-            context_groups = [ratings for ratings in ratings_by_context.values() if len(ratings) >= 3]
-            if len(context_groups) >= 2:
-                # Kruskal-Wallis test for multiple groups
+        def _average_ranks(values: List[float]) -> List[float]:
+            """Compute 1-based average ranks (tie-aware) for a list of values."""
+            n = len(values)
+            sorted_indices = sorted(range(n), key=lambda i: values[i])
+            ranks: List[float] = [0.0] * n
+            i = 0
+            while i < n:
+                j = i
+                while j + 1 < n and values[sorted_indices[j]] == values[sorted_indices[j + 1]]:
+                    j += 1
+                # Average rank for tie group, ranks are 1..n
+                avg_rank = (i + 1 + j + 1) / 2.0
+                for k in range(i, j + 1):
+                    ranks[sorted_indices[k]] = avg_rank
+                i = j + 1
+            return ranks
+
+        def _mann_whitney_u_pvalue(group1: List[float], group2: List[float]) -> float:
+            """
+            Mann–Whitney U test (two-sided) with normal approximation + tie correction.
+            Returns an approximate p-value without SciPy.
+            """
+            n1 = len(group1)
+            n2 = len(group2)
+            if n1 == 0 or n2 == 0:
+                return 1.0
+
+            combined = list(group1) + list(group2)
+            ranks = _average_ranks(combined)
+            r1 = sum(ranks[:n1])
+            u1 = r1 - (n1 * (n1 + 1)) / 2.0
+            u2 = (n1 * n2) - u1
+            u = min(u1, u2)
+
+            n = n1 + n2
+            mean_u = (n1 * n2) / 2.0
+
+            # Tie correction
+            tie_counts = Counter(combined)
+            tie_term = sum(t**3 - t for t in tie_counts.values())
+            if n > 1:
+                tie_correction = 1.0 - (tie_term / (n**3 - n))
+            else:
+                tie_correction = 1.0
+
+            var_u = (n1 * n2 * (n + 1)) / 12.0
+            var_u *= tie_correction
+            if var_u <= 0:
+                return 1.0
+
+            z = (u - mean_u) / math.sqrt(var_u)
+            # Two-sided p-value
+            p = 2.0 * (1.0 - NormalDist().cdf(abs(z)))
+            return float(max(0.0, min(1.0, p)))
+
+        # Statistical test for differences (always expose key for API/test stability)
+        results["statistical_test"] = None
+        context_groups = [ratings for ratings in ratings_by_context.values() if len(ratings) >= 3]
+        if len(context_groups) >= 2:
+            if stats is not None:
+                # Kruskal-Wallis test (SciPy)
                 try:
                     h_stat, p_value = stats.kruskal(*context_groups)
                     results["statistical_test"] = {
                         "test": "kruskal_wallis",
                         "h_statistic": float(h_stat),
                         "p_value": float(p_value),
-                        "significant": p_value < 0.05,
+                        "significant": bool(p_value < 0.05),
                     }
-                except:
-                    pass
+                except Exception:
+                    results["statistical_test"] = None
+            else:
+                # No SciPy installed: provide a best-effort nonparametric test.
+                # For 2 groups we use Mann–Whitney U with normal approximation.
+                if len(context_groups) == 2:
+                    p_value = _mann_whitney_u_pvalue(context_groups[0], context_groups[1])
+                    results["statistical_test"] = {
+                        "test": "mann_whitney_u",
+                        "p_value": float(p_value),
+                        "significant": bool(p_value < 0.05),
+                    }
+                else:
+                    # Multi-group: compute Kruskal-Wallis H, but omit p-value without chi-square CDF.
+                    combined = [v for group in context_groups for v in group]
+                    ranks = _average_ranks(combined)
+                    n = len(combined)
+                    if n > 1:
+                        offset = 0
+                        sum_term = 0.0
+                        for group in context_groups:
+                            ni = len(group)
+                            ri = sum(ranks[offset : offset + ni])
+                            sum_term += (ri**2) / ni
+                            offset += ni
+                        h_stat = (12.0 / (n * (n + 1))) * sum_term - 3.0 * (n + 1)
+                        results["statistical_test"] = {
+                            "test": "kruskal_wallis",
+                            "h_statistic": float(h_stat),
+                            "p_value": None,
+                            "significant": None,
+                            "note": "SciPy not installed; p-value unavailable for multi-group test.",
+                        }
 
         return results
 
