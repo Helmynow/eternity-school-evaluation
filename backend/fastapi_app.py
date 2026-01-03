@@ -8,12 +8,13 @@ import hashlib
 import io
 import json
 import os
-import requests
 import secrets
 from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+import requests
 
 # Initialize Sentry SDK before FastAPI app
 import sentry_sdk
@@ -82,6 +83,7 @@ from backend.ai_models.ai_bias_detector import AIBiasDetector
 from backend.ai_models.bias_analytics import BiasAnalytics
 from backend.ai_models.eom_category_recommender import EOMCategoryRecommender
 from backend.audit_logger import AuditLogger
+from backend.auth import SupabaseAuthError, decode_supabase_jwt, extract_bearer_token, fetch_supabase_user
 from backend.bias_detection_360 import Complete360BiasDetection
 from backend.bulk_import import BulkImporter
 from backend.conditional_anonymity_engine import ConditionalAnonymityEngine
@@ -96,8 +98,8 @@ from backend.database import (
     EOMCategory,
     EOMCycle,
     EOMNominee,
-    EOMWinner,
     EOMVoter,
+    EOMWinner,
     Evaluation,
     Feedback,
     HybridIdentitySession,
@@ -124,7 +126,6 @@ from backend.survey_identity_manager import SurveyIdentityManager
 from backend.survey_templates import EternitySchoolSurveyTemplates
 from backend.system_setup import EternitySchoolSystemSetup
 from backend.weight_matrix_handler import WeightMatrixHandler
-from backend.auth import SupabaseAuthError, decode_supabase_jwt, extract_bearer_token, fetch_supabase_user
 
 # Initialize FastAPI app
 DOCS_ENABLED = os.getenv("ENABLE_DOCS", "false" if IS_PRODUCTION else "true").lower() in ("1", "true", "yes")
@@ -2474,8 +2475,9 @@ async def health_config():
     Non-secret runtime config flags to avoid guessing in production.
     Safe to expose publicly (booleans only).
     """
-    from backend.email_service import EmailService
     from urllib.parse import urlparse
+
+    from backend.email_service import EmailService
 
     supabase_url_env = (os.getenv("SUPABASE_URL") or "").strip()
     supabase_url_vite = (os.getenv("VITE_SUPABASE_URL") or "").strip()
@@ -2905,7 +2907,6 @@ async def get_announcements(
         from datetime import datetime
 
         from backend.database import Announcement
-
         from backend.rbac_system import RBACSystem
 
         current_user_email = _require_authenticated_email(http_request)
