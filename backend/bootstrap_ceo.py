@@ -89,7 +89,9 @@ def main(argv: list[str]) -> int:
 
     role_title = (args.role_title or "").strip() or "CEO"
     if "ceo" not in role_title.lower():
-        print("role_title must contain 'CEO' to qualify for bootstrap (e.g., 'CEO', 'Chief Executive Officer').", file=sys.stderr)
+        print(
+            "role_title must contain 'CEO' to qualify for bootstrap (e.g., 'CEO', 'Chief Executive Officer').", file=sys.stderr
+        )
         return 2
 
     segment = (args.segment or "").strip() or "whole_school"

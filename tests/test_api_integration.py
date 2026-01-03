@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+
 try:
     import requests
 except ModuleNotFoundError:  # pragma: no cover

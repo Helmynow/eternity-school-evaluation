@@ -115,4 +115,3 @@ def fetch_supabase_user(
     user_id = user.get("id") or user.get("sub")
     role = user.get("role")
     return AuthContext(email=email, user_id=user_id, role=role, claims=user)
-

@@ -196,6 +196,7 @@ PUBLIC_PATHS = {
     "/openapi.json",
 }
 
+
 def _require_authenticated_email(request: Request) -> str:
     email = getattr(request.state, "user_email", None)
     if not email:
@@ -511,6 +512,7 @@ class CEOReportRequest(BaseModel):
 # EOM Nomination Endpoints
 # ============================================================================
 
+
 def _resolve_eom_cycle_id(db: Session, cycle_or_eom_cycle_id: int) -> int:
     """
     Accepts either an EOMCycle.id or a Cycle.id and returns a valid EOMCycle.id.
@@ -530,10 +532,7 @@ def _resolve_eom_cycle_id(db: Session, cycle_or_eom_cycle_id: int) -> int:
         raise HTTPException(status_code=404, detail="EOM cycle not found")
 
     latest = (
-        db.query(EOMCycle)
-        .filter(EOMCycle.cycle_id == cycle.id)
-        .order_by(EOMCycle.year.desc(), EOMCycle.month.desc())
-        .first()
+        db.query(EOMCycle).filter(EOMCycle.cycle_id == cycle.id).order_by(EOMCycle.year.desc(), EOMCycle.month.desc()).first()
     )
     if latest:
         return latest.id
@@ -2082,9 +2081,7 @@ async def create_cycle(request: CycleCreateRequest, http_request: Request, db: S
 
 
 @app.put("/api/v2/cycles/{cycle_id}")
-async def update_cycle(
-    cycle_id: int, request: CycleUpdateRequest, http_request: Request, db: Session = Depends(get_db)
-):
+async def update_cycle(cycle_id: int, request: CycleUpdateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Update a cycle (admin only)."""
     try:
         _require_admin_access(http_request, db)
@@ -2521,9 +2518,9 @@ async def password_recovery(payload: PasswordRecoveryRequest, http_request: Requ
     redirect_to = f"{candidate_origin.rstrip('/')}/reset-password"
 
     # Supabase configuration
-    supabase_url = (os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "https://ywcfqlyhesnikclesgpr.supabase.co").rstrip(
-        "/"
-    )
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or "https://ywcfqlyhesnikclesgpr.supabase.co"
+    ).rstrip("/")
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
     anon_key = os.getenv("SUPABASE_ANON_KEY")
 
@@ -2551,11 +2548,15 @@ async def password_recovery(payload: PasswordRecoveryRequest, http_request: Requ
 
                 if hashed_token:
                     # Build a fully-qualified verify URL (properly encoded)
-                    verify_url = requests.Request(
-                        "GET",
-                        f"{supabase_url}/auth/v1/verify",
-                        params={"token": hashed_token, "type": verification_type, "redirect_to": redirect_to},
-                    ).prepare().url
+                    verify_url = (
+                        requests.Request(
+                            "GET",
+                            f"{supabase_url}/auth/v1/verify",
+                            params={"token": hashed_token, "type": verification_type, "redirect_to": redirect_to},
+                        )
+                        .prepare()
+                        .url
+                    )
 
                     from backend.email_service import EmailService
 
@@ -2661,7 +2662,15 @@ async def submit_objection(request: ObjectionSubmitRequest, http_request: Reques
             title = "EOM Nomination Objection"
             description = request.reason
         else:
-            if not all([request.objection_type, request.related_entity_type, request.related_entity_id, request.title, request.description]):
+            if not all(
+                [
+                    request.objection_type,
+                    request.related_entity_type,
+                    request.related_entity_id,
+                    request.title,
+                    request.description,
+                ]
+            ):
                 raise HTTPException(status_code=400, detail="Missing required objection fields")
             objection_type = request.objection_type
             related_entity_type = request.related_entity_type
@@ -2881,9 +2890,7 @@ async def get_announcements(
             query = query.filter(Announcement.target_audience == target_audience)
         elif not is_admin:
             # Auto-filter based on current user's inferred role
-            query = query.filter(
-                (Announcement.target_audience == "all") | (Announcement.target_audience == current_role)
-            )
+            query = query.filter((Announcement.target_audience == "all") | (Announcement.target_audience == current_role))
 
         # Filter out expired announcements
         query = query.filter((Announcement.expires_at.is_(None)) | (Announcement.expires_at > datetime.utcnow()))
@@ -2929,9 +2936,7 @@ async def get_announcement(announcement_id: int, http_request: Request, db: Sess
         query = db.query(Announcement).filter(Announcement.id == announcement_id)
         if not is_admin:
             query = query.filter(Announcement.is_active == True)
-            query = query.filter(
-                (Announcement.target_audience == "all") | (Announcement.target_audience == current_role)
-            )
+            query = query.filter((Announcement.target_audience == "all") | (Announcement.target_audience == current_role))
             query = query.filter((Announcement.expires_at.is_(None)) | (Announcement.expires_at > datetime.utcnow()))
 
         announcement = query.first()
@@ -3409,9 +3414,7 @@ class ConditionalRevealRequest(BaseModel):
 
 
 @app.post("/api/v2/survey/identity/conditional-reveal")
-async def process_conditional_reveal(
-    request: ConditionalRevealRequest, http_request: Request, db: Session = Depends(get_db)
-):
+async def process_conditional_reveal(request: ConditionalRevealRequest, http_request: Request, db: Session = Depends(get_db)):
     """
     Process conditional reveal preferences.
 
@@ -3438,7 +3441,9 @@ async def process_conditional_reveal(
             "reminder_frequency": request.reminder_frequency,
         }
 
-        result = engine.process_conditional_reveal(user_id=current_user_email, user_choice=user_choice, survey_id=request.survey_id)
+        result = engine.process_conditional_reveal(
+            user_id=current_user_email, user_choice=user_choice, survey_id=request.survey_id
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing conditional reveal: {str(e)}")
@@ -4093,11 +4098,7 @@ async def get_unread_notification_count(
         if target_email.lower() != current_user_email.lower():
             _require_admin_access(request, db)
 
-        count = (
-            db.query(Notification)
-            .filter(Notification.recipient_email == target_email, Notification.read == False)
-            .count()
-        )
+        count = db.query(Notification).filter(Notification.recipient_email == target_email, Notification.read == False).count()
         return {"unread_count": count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching unread count: {str(e)}")
@@ -4736,7 +4737,9 @@ async def get_audit_logs(
                     query = query.filter(AuditLog.created_at <= end_dt)
                 else:
                     end_date = date.fromisoformat(date_to)
-                    query = query.filter(AuditLog.created_at < (datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)))
+                    query = query.filter(
+                        AuditLog.created_at < (datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+                    )
             except ValueError:
                 raise HTTPException(status_code=422, detail="Invalid date_to. Use ISO format.")
 
