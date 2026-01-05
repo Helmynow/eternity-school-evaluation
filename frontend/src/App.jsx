@@ -5,6 +5,7 @@ import { useAuth } from './hooks/useAuth'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import LoadingSkeleton from './components/common/LoadingSkeleton'
 import PerformanceMonitor from './components/common/PerformanceMonitor'
+import RequireRole from './components/auth/RequireRole'
 
 // Lazy load components for code splitting
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard'))
@@ -79,30 +80,121 @@ function App() {
               <Routes>
             <Route path="/" element={isRecoveryFlow ? <ResetPassword /> : <Dashboard />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/eom/nominate" element={<EOMNomination />} />
-            <Route path="/eom/vote" element={<EOMNomination mode="vote" />} />
+            <Route
+              path="/eom/nominate"
+              element={
+                <RequireRole roles={['department_head']} deniedSubtitle="Department head access required">
+                  <EOMNomination />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/eom/vote"
+              element={
+                <RequireRole roles={['department_head']} deniedSubtitle="Department head access required">
+                  <EOMNomination mode="vote" />
+                </RequireRole>
+              }
+            />
             <Route path="/eom/hall-of-fame" element={<EOMHallOfFame />} />
             <Route path="/eom/diversity" element={<EOMDiversityDashboard />} />
             <Route path="/eom/feedback" element={<EOMFeedbackForm />} />
             <Route path="/mre/evaluate" element={<MREEvaluation />} />
-            <Route path="/admin/cycles" element={<CycleManagement />} />
-            <Route path="/admin/staff" element={<StaffManagement />} />
-            <Route path="/admin/settings" element={<Settings />} />
-            <Route path="/admin/objections" element={<Objections />} />
-            <Route path="/admin/announcements" element={<Announcements />} />
-            <Route path="/admin/import" element={<BulkImport />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/integration" element={<IntegrationHub />} />
+            <Route
+              path="/admin/cycles"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <CycleManagement />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/staff"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <StaffManagement />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <RequireRole roles={['ceo']} deniedSubtitle="CEO access required">
+                  <Settings />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/objections"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <Objections />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/announcements"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <Announcements />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/import"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <BulkImport />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <AdminDashboard />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/admin/integration"
+              element={
+                <RequireRole roles={['ceo']} deniedSubtitle="CEO access required">
+                  <IntegrationHub />
+                </RequireRole>
+              }
+            />
             <Route path="/reports" element={<Reports />} />
             <Route path="/history" element={<History />} />
             <Route path="/notifications" element={<NotificationsCenter />} />
             <Route path="/survey" element={<SurveyList />} />
             <Route path="/survey/create" element={<SurveyCreate />} />
             <Route path="/survey/:surveyId" element={<SurveySession />} />
-            <Route path="/survey/:surveyId/edit" element={<SurveyEdit />} />
+            <Route
+              path="/survey/:surveyId/edit"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <SurveyEdit />
+                </RequireRole>
+              }
+            />
             <Route path="/survey/:surveyId/questions" element={<SurveyQuestions />} />
-            <Route path="/survey/:surveyId/responses" element={<SurveyResponseReview />} />
-            <Route path="/survey/:surveyId/analytics" element={<SurveyAnalytics />} />
+            <Route
+              path="/survey/:surveyId/responses"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <SurveyResponseReview />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/survey/:surveyId/analytics"
+              element={
+                <RequireRole roles={['pnc']} deniedSubtitle="Admin access required">
+                  <SurveyAnalytics />
+                </RequireRole>
+              }
+            />
             <Route path="/survey/test/:surveyId?" element={<IdentityModeTest />} />
             <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

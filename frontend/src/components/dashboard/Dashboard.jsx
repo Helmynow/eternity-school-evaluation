@@ -85,18 +85,21 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-ese-lang-900">Dashboard</h1>
-          <p className="text-ese-ink-blue mt-1">Evaluation & Recognition Overview</p>
+      {/* Header / Hero (darker background like “photo 1”) */}
+      <div className="rounded-ese-card bg-ese-ink-navy px-6 py-5 shadow-ese-drop border border-white/10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-white">Dashboard</h1>
+            <p className="text-white/80 mt-1">Evaluation & Recognition Overview</p>
+          </div>
+
+          <button
+            onClick={() => selectedCycle && loadCycleData(selectedCycle)}
+            className="inline-flex items-center justify-center rounded-ese-pill px-6 py-3 font-medium text-white bg-white/10 hover:bg-white/20 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+          >
+            Refresh
+          </button>
         </div>
-        <button
-          onClick={() => selectedCycle && loadCycleData(selectedCycle)}
-          className="ese-button-secondary"
-        >
-          Refresh
-        </button>
       </div>
 
       {/* Cycle Selector */}

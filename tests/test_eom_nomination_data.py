@@ -22,6 +22,26 @@ def test_db(test_database_url):
         session.execute(text("SELECT 1"))
     except Exception:
         pytest.skip("Postgres test database not available; set DATABASE_URL or start local Postgres to run these tests")
+
+    # Make the module-level fixture re-runnable locally by clearing existing rows.
+    # CI Postgres is ephemeral, but local Postgres often persists between runs.
+    for table in (
+        "eom_nominees",
+        "eom_winners",
+        "eom_voters",
+        "eom_cycles",
+        "eom_rotation_rules",
+        "evaluations",
+        "assignments",
+        "weight_matrices",
+        "people",
+        "cycles",
+    ):
+        try:
+            session.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+            session.commit()
+        except Exception:
+            session.rollback()
     yield session
     session.close()
 

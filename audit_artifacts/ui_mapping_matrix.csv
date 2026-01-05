@@ -1,0 +1,151 @@
+feature,ui_route,ui_component,ui_file,ui_ref,api_method,api_path,backend_ref,permission_key,rls_tables,rls_notes,audit_event,tests,notes
+,,,,frontend/src/lib/api.js:379,GET,/api/v2/admin/dashboard,backend/fastapi_app.py:4567,,,,,,
+,,,,frontend/src/lib/api.js:382,GET,/api/v2/admin/dashboard/identity-analytics,backend/fastapi_app.py:4635,,,,,,
+,,,,frontend/src/lib/api.js:380,GET,/api/v2/admin/dashboard/overview-cards,backend/fastapi_app.py:4597,,,,,,
+,,,,frontend/src/lib/api.js:381,GET,/api/v2/admin/dashboard/real-time-metrics,backend/fastapi_app.py:4616,,,,,,
+,,,,frontend/src/lib/api.js:456,GET,/api/v2/admin/settings,backend/fastapi_app.py:4707,,,,,,
+,,,,frontend/src/lib/api.js:458,POST,/api/v2/admin/settings,backend/fastapi_app.py:4768,,,,,,
+,,,,frontend/src/lib/api.js:457,PUT,/api/v2/admin/settings,backend/fastapi_app.py:4733,,,,,,
+,,,,frontend/src/lib/api.js:410,GET,/api/v2/analytics/bias/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:411,GET,/api/v2/analytics/eom/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:412,GET,/api/v2/analytics/mre/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:409,GET,/api/v2/analytics/participation/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:439,GET,/api/v2/announcements,backend/fastapi_app.py:3121,,,,,,
+,,,,frontend/src/lib/api.js:441,POST,/api/v2/announcements,backend/fastapi_app.py:3080,,,,,,
+,,,,frontend/src/lib/api.js:443,DELETE,/api/v2/announcements/${id},,,,,,,
+,,,,frontend/src/lib/api.js:440,GET,/api/v2/announcements/${id},,,,,,,
+,,,,frontend/src/lib/api.js:442,PUT,/api/v2/announcements/${id},,,,,,,
+,,,,frontend/src/lib/api.js:417,GET,/api/v2/audit-logs,backend/fastapi_app.py:4955,,,,,,
+,,,,frontend/src/lib/api.js:248,POST,/api/v2/bias/360/context-aware-report/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:242,GET,/api/v2/bias/reports/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:245,GET,/api/v2/bias/reports/${cycleId}/target/${email},,,,,,,
+,,,,frontend/src/lib/api.js:239,POST,/api/v2/bias/reports/generate,backend/fastapi_app.py:1517,,,,,,
+,,,,frontend/src/lib/api.js:263,GET,/api/v2/cycles,backend/fastapi_app.py:2241,,,,,,
+,,,,frontend/src/lib/api.js:272,POST,/api/v2/cycles,backend/fastapi_app.py:2263,,,,,,
+,,,,frontend/src/lib/api.js:266,GET,/api/v2/cycles/${id},,,,,,,
+,,,,frontend/src/lib/api.js:275,PUT,/api/v2/cycles/${id},,,,,,,
+,,,,frontend/src/lib/api.js:269,GET,/api/v2/cycles/current,backend/fastapi_app.py:2363,,,,,,
+,,,,frontend/src/lib/api.js:257,GET,/api/v2/dashboard/analytics/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:254,GET,/api/v2/dashboard/participation/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:218,GET,/api/v2/eom/cycles/${cycleId}/window-status,,,,,,,
+,,,,frontend/src/lib/api.js:212,GET,/api/v2/eom/diversity-tracking,backend/fastapi_app.py:5588,,,,,,
+,,,,frontend/src/lib/api.js:215,POST,/api/v2/eom/feedback,backend/fastapi_app.py:5620,,,,,,
+,,,,frontend/src/lib/api.js:209,GET,/api/v2/eom/hall-of-fame,backend/fastapi_app.py:5553,,,,,,
+,,,,frontend/src/lib/api.js:185,GET,/api/v2/eom/nominations/cycle/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:178,POST,/api/v2/eom/nominations/submit,backend/fastapi_app.py:644,,,,,,
+,,,,frontend/src/lib/api.js:201,POST,/api/v2/eom/nominations/suggest-category,backend/fastapi_app.py:626,,,,,,
+,,,,frontend/src/lib/api.js:181,POST,/api/v2/eom/nominations/validate,backend/fastapi_app.py:792,,,,,,
+,,,,frontend/src/lib/api.js:197,GET,/api/v2/eom/rotation-rules/analytics/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:194,GET,/api/v2/eom/rotation-rules/eligible-nominees/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:188,POST,/api/v2/eom/vote,backend/fastapi_app.py:918,,,,,,
+,,,,frontend/src/lib/api.js:191,GET,/api/v2/eom/winners/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:314,GET,/api/v2/evaluation-matrix/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:374,GET,/api/v2/hybrid-identity/analyze-survey-data,backend/fastapi_app.py:4025,,,,,,
+,,,,frontend/src/lib/api.js:361,POST,/api/v2/hybrid-identity/create-survey-session,backend/fastapi_app.py:3867,,,,,,
+,,,,frontend/src/lib/api.js:360,POST,/api/v2/hybrid-identity/initialize-session,backend/fastapi_app.py:3824,,,,,,
+,,,,frontend/src/lib/api.js:372,POST,/api/v2/hybrid-identity/process-reveal-request,backend/fastapi_app.py:4000,,,,,,
+,,,,frontend/src/lib/api.js:362,POST,/api/v2/hybrid-identity/submit-response,backend/fastapi_app.py:3916,,,,,,
+,,,,frontend/src/lib/api.js:363,POST,/api/v2/hybrid-identity/switch-mode,backend/fastapi_app.py:3975,,,,,,
+,,,,frontend/src/lib/api.js:403,POST,/api/v2/import/eom-candidates,backend/fastapi_app.py:5472,,,,,,
+,,,,frontend/src/lib/api.js:402,POST,/api/v2/import/eom-voters,backend/fastapi_app.py:5442,,,,,,
+,,,,frontend/src/lib/api.js:401,POST,/api/v2/import/staff,backend/fastapi_app.py:5418,,,,,,
+,,,,frontend/src/lib/api.js:404,POST,/api/v2/import/weight-matrix,backend/fastapi_app.py:5495,,,,,,
+,,,,frontend/src/lib/api.js:388,GET,/api/v2/integration/evaluation-bridge,backend/fastapi_app.py:4858,,,,,,
+,,,,frontend/src/lib/api.js:387,POST,/api/v2/integration/hr/setup,backend/fastapi_app.py:4836,,,,,,
+,,,,frontend/src/lib/api.js:390,POST,/api/v2/integration/sync/evaluation,backend/fastapi_app.py:4888,,,,,,
+,,,,frontend/src/lib/api.js:389,POST,/api/v2/integration/sync/staff,backend/fastapi_app.py:4873,,,,,,
+,,,,frontend/src/lib/api.js:224,GET,/api/v2/mre/assignments/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:233,GET,/api/v2/mre/domains/${targetGroup},,,,,,,
+,,,,frontend/src/lib/api.js:230,GET,/api/v2/mre/evaluations/${cycleId}/weighted-scores,,,,,,,
+,,,,frontend/src/lib/api.js:227,POST,/api/v2/mre/evaluations/process,backend/fastapi_app.py:1377,,,,,,
+,,,,frontend/src/lib/api.js:422,GET,/api/v2/notifications,backend/fastapi_app.py:3313,,,,,,
+,,,,frontend/src/lib/api.js:423,POST,/api/v2/notifications/${id}/read,,,,,,,
+,,,,frontend/src/lib/api.js:425,POST,/api/v2/notifications/mark-read,backend/fastapi_app.py:4375,,,,,,
+,,,,frontend/src/lib/api.js:424,POST,/api/v2/notifications/read-all,backend/fastapi_app.py:3387,,,,,,
+,,,,frontend/src/lib/api.js:426,GET,/api/v2/notifications/unread-count,backend/fastapi_app.py:4356,,,,,,
+,,,,frontend/src/lib/api.js:431,GET,/api/v2/objections,backend/fastapi_app.py:2968,,,,,,
+,,,,frontend/src/lib/api.js:433,POST,/api/v2/objections,backend/fastapi_app.py:2920,,,,,,
+,,,,frontend/src/lib/api.js:432,GET,/api/v2/objections/${id},,,,,,,
+,,,,frontend/src/lib/api.js:434,POST,/api/v2/objections/${id}/resolve,,,,,,,
+,,,,frontend/src/lib/api.js:281,GET,/api/v2/people,backend/fastapi_app.py:2459,,,,,,
+,,,,frontend/src/lib/api.js:290,POST,/api/v2/people,backend/fastapi_app.py:2549,,,,,,
+,,,,frontend/src/lib/api.js:284,GET,/api/v2/people/${email},,,,,,,
+,,,,frontend/src/lib/api.js:293,PUT,/api/v2/people/${encodeURIComponent(email)},,,,,,,
+,,,,frontend/src/lib/api.js:287,GET,/api/v2/people/segment/${segment},,,,,,,
+,,,,frontend/src/lib/api.js:450,GET,/api/v2/reports/bias/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:448,GET,/api/v2/reports/ceo/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:449,POST,/api/v2/reports/ceo/export,backend/fastapi_app.py:2005,,,,,,
+,,,,frontend/src/lib/api.js:451,GET,/api/v2/reports/participation/${cycleId},,,,,,,
+,,,,frontend/src/lib/api.js:305,POST,/api/v2/staff/${email}/assign-evaluators,,,,,,,
+,,,,frontend/src/lib/api.js:299,GET,/api/v2/staff/${email}/evaluation-status,,,,,,,
+,,,,frontend/src/lib/api.js:302,GET,/api/v2/staff/${email}/evaluators,,,,,,,
+,,,,frontend/src/lib/api.js:308,PUT,/api/v2/staff/${email}/evaluators,,,,,,,
+,,,,frontend/src/lib/api.js:342,GET,/api/v2/survey-templates/comprehensive,backend/fastapi_app.py:4529,,,,,,
+,,,,frontend/src/lib/api.js:345,GET,/api/v2/survey-templates/section/${category},,,,,,,
+,,,,frontend/src/lib/api.js:335,POST,/api/v2/survey/identity/conditional-reveal,backend/fastapi_app.py:3684,,,,,,
+,,,,frontend/src/lib/api.js:336,GET,/api/v2/survey/identity/conditional-reveal/check-triggers/${userEmail},,,,,,,
+,,,,frontend/src/lib/api.js:337,POST,/api/v2/survey/identity/conditional-reveal/execute/${userEmail},,,,,,,
+,,,,frontend/src/lib/api.js:331,POST,/api/v2/survey/identity/preference,backend/fastapi_app.py:3562,,,,,,
+,,,,frontend/src/lib/api.js:352,POST,/api/v2/survey/identity/preference,backend/fastapi_app.py:3562,,,,,,
+,,,,frontend/src/lib/api.js:332,POST,/api/v2/survey/identity/reveal,backend/fastapi_app.py:3585,,,,,,
+,,,,frontend/src/lib/api.js:334,POST,/api/v2/survey/identity/revoke-anonymity,backend/fastapi_app.py:3643,,,,,,
+,,,,frontend/src/lib/api.js:333,GET,/api/v2/survey/identity/status/${userEmail},,,,,,,
+,,,,frontend/src/lib/api.js:353,GET,/api/v2/survey/identity/status/${userEmail},,,,,,,
+,,,,frontend/src/lib/api.js:319,GET,/api/v2/surveys,backend/fastapi_app.py:4070,,,,,,
+,,,,frontend/src/lib/api.js:321,POST,/api/v2/surveys,backend/fastapi_app.py:4133,,,,,,
+,,,,frontend/src/lib/api.js:320,GET,/api/v2/surveys/${id},,,,,,,
+,,,,frontend/src/lib/api.js:322,PUT,/api/v2/surveys/${id},,,,,,,
+,,,,frontend/src/lib/api.js:326,GET,/api/v2/surveys/${surveyId}/analytics,,,,,,,
+,,,,frontend/src/lib/api.js:323,GET,/api/v2/surveys/${surveyId}/questions,,,,,,,
+,,,,frontend/src/lib/api.js:324,GET,/api/v2/surveys/${surveyId}/responses,,,,,,,
+,,,,frontend/src/lib/api.js:325,POST,/api/v2/surveys/responses,backend/fastapi_app.py:4272,,,,,,
+,,,,frontend/src/lib/api.js:396,GET,/api/v2/system/go-live-checklist,backend/fastapi_app.py:4938,,,,,,
+,,,,frontend/src/lib/api.js:395,POST,/api/v2/system/setup,backend/fastapi_app.py:4917,,,,,,
+,*,,frontend/src/App.jsx,frontend/src/App.jsx:72,,,,,,,,,route discovered
+,*,,frontend/src/App.jsx,frontend/src/App.jsx:107,,,,,,,,,route discovered
+,/,,frontend/src/App.jsx,frontend/src/App.jsx:80,,,,,,,,,route discovered
+,/,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:43,,,,,,,,,route discovered
+,/admin/announcements,,frontend/src/App.jsx,frontend/src/App.jsx:92,,,,,,,,,route discovered
+,/admin/announcements,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:89,,,,,,,,,route discovered
+,/admin/cycles,,frontend/src/App.jsx,frontend/src/App.jsx:88,,,,,,,,,route discovered
+,/admin/cycles,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:71,,,,,,,,,route discovered
+,/admin/dashboard,,frontend/src/App.jsx,frontend/src/App.jsx:94,,,,,,,,,route discovered
+,/admin/dashboard,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:65,,,,,,,,,route discovered
+,/admin/import,,frontend/src/App.jsx,frontend/src/App.jsx:93,,,,,,,,,route discovered
+,/admin/import,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:95,,,,,,,,,route discovered
+,/admin/integration,,frontend/src/App.jsx,frontend/src/App.jsx:95,,,,,,,,,route discovered
+,/admin/integration,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:101,,,,,,,,,route discovered
+,/admin/objections,,frontend/src/App.jsx,frontend/src/App.jsx:91,,,,,,,,,route discovered
+,/admin/objections,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:83,,,,,,,,,route discovered
+,/admin/settings,,frontend/src/App.jsx,frontend/src/App.jsx:90,,,,,,,,,route discovered
+,/admin/settings,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:107,,,,,,,,,route discovered
+,/admin/staff,,frontend/src/App.jsx,frontend/src/App.jsx:89,,,,,,,,,route discovered
+,/admin/staff,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:77,,,,,,,,,route discovered
+,/eom/diversity,,frontend/src/App.jsx,frontend/src/App.jsx:85,,,,,,,,,route discovered
+,/eom/feedback,,frontend/src/App.jsx,frontend/src/App.jsx:86,,,,,,,,,route discovered
+,/eom/hall-of-fame,,frontend/src/App.jsx,frontend/src/App.jsx:84,,,,,,,,,route discovered
+,/eom/nominate,,frontend/src/App.jsx,frontend/src/App.jsx:82,,,,,,,,,route discovered
+,/eom/nominate,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:116,,,,,,,,,route discovered
+,/eom/vote,,frontend/src/App.jsx,frontend/src/App.jsx:83,,,,,,,,,route discovered
+,/eom/vote,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:122,,,,,,,,,route discovered
+,/forgot-password,,frontend/src/App.jsx,frontend/src/App.jsx:70,,,,,,,,,route discovered
+,/history,,frontend/src/App.jsx,frontend/src/App.jsx:97,,,,,,,,,route discovered
+,/history,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:137,,,,,,,,,route discovered
+,/login,,frontend/src/App.jsx,frontend/src/App.jsx:69,,,,,,,,,route discovered
+,/mre/evaluate,,frontend/src/App.jsx,frontend/src/App.jsx:87,,,,,,,,,route discovered
+,/mre/evaluate,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:56,,,,,,,,,route discovered
+,/notifications,,frontend/src/App.jsx,frontend/src/App.jsx:98,,,,,,,,,route discovered
+,/notifications,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:143,,,,,,,,,route discovered
+,/reports,,frontend/src/App.jsx,frontend/src/App.jsx:96,,,,,,,,,route discovered
+,/reports,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:131,,,,,,,,,route discovered
+,/reset-password,,frontend/src/App.jsx,frontend/src/App.jsx:71,,,,,,,,,route discovered
+,/reset-password,,frontend/src/App.jsx,frontend/src/App.jsx:81,,,,,,,,,route discovered
+,/survey,,frontend/src/App.jsx,frontend/src/App.jsx:99,,,,,,,,,route discovered
+,/survey,,frontend/src/components/layout/Layout.jsx,frontend/src/components/layout/Layout.jsx:50,,,,,,,,,route discovered
+,/survey/:surveyId,,frontend/src/App.jsx,frontend/src/App.jsx:101,,,,,,,,,route discovered
+,/survey/:surveyId/analytics,,frontend/src/App.jsx,frontend/src/App.jsx:105,,,,,,,,,route discovered
+,/survey/:surveyId/edit,,frontend/src/App.jsx,frontend/src/App.jsx:102,,,,,,,,,route discovered
+,/survey/:surveyId/questions,,frontend/src/App.jsx,frontend/src/App.jsx:103,,,,,,,,,route discovered
+,/survey/:surveyId/responses,,frontend/src/App.jsx,frontend/src/App.jsx:104,,,,,,,,,route discovered
+,/survey/create,,frontend/src/App.jsx,frontend/src/App.jsx:100,,,,,,,,,route discovered
+,/survey/test/:surveyId?,,frontend/src/App.jsx,frontend/src/App.jsx:106,,,,,,,,,route discovered

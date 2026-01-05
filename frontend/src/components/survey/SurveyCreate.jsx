@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -9,10 +9,13 @@ import LoadingSkeleton from '../common/LoadingSkeleton'
 
 const SurveyCreate = () => {
   const navigate = useNavigate()
-  const { user, isCEO, isPNC } = useAuth()
+  const { user, isCEO, isPNC, isDepartmentHead, isStaff } = useAuth()
   const { comprehensiveTemplate, fetchComprehensive, loading: templateLoading } = useSurveyTemplates()
   const [loading, setLoading] = useState(false)
   const [useTemplate, setUseTemplate] = useState(false)
+  const [standardizedTemplates, setStandardizedTemplates] = useState([])
+  const [standardizedLoading, setStandardizedLoading] = useState(false)
+  const [standardizedSelection, setStandardizedSelection] = useState('')
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -30,6 +33,22 @@ const SurveyCreate = () => {
       toast.error('Failed to load template')
     }
   }
+
+  const loadStandardizedTemplates = async () => {
+    setStandardizedLoading(true)
+    try {
+      const response = await apiClient.surveyTemplates.getStandardized()
+      setStandardizedTemplates(response.data?.surveys || [])
+    } catch (error) {
+      toast.error('Failed to load standardized templates')
+    } finally {
+      setStandardizedLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadStandardizedTemplates()
+  }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -56,7 +75,9 @@ const SurveyCreate = () => {
       toast.success('Survey created successfully!')
       
       // If using template, navigate to question management
-      if (useTemplate && comprehensiveTemplate) {
+      if (standardizedSelection) {
+        navigate(`/survey/${response.data.id}/questions?template=standardized&name=${encodeURIComponent(standardizedSelection)}`)
+      } else if (useTemplate && comprehensiveTemplate) {
         navigate(`/survey/${response.data.id}/questions?template=true`)
       } else {
         navigate(`/survey/${response.data.id}/questions`)
@@ -73,11 +94,11 @@ const SurveyCreate = () => {
     }
   }
 
-  if (!isCEO && !isPNC) {
+  if (!isCEO && !isPNC && !isDepartmentHead && !isStaff) {
     return (
       <div className="p-6 text-center">
         <p className="text-ese-ink-medium text-lg">Access Denied</p>
-        <p className="text-ese-ink-light mt-2">Admin access required to create surveys</p>
+        <p className="text-ese-ink-light mt-2">Staff access required to create surveys</p>
       </div>
     )
   }
@@ -109,6 +130,48 @@ const SurveyCreate = () => {
             {useTemplate && comprehensiveTemplate && (
               <p className="text-sm text-ese-ink-medium">
                 Template loaded: {comprehensiveTemplate.title || 'Comprehensive Survey Template'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Standardized Templates */}
+        <div className="bg-white rounded-lg shadow-md p-6 border border-ese-ink-light mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-ese-ink-navy">Standardized Templates</h2>
+              <p className="text-sm text-ese-ink-medium mt-1">
+                Auto-load standardized parent/staff templates after creation.
+              </p>
+            </div>
+            <button
+              onClick={loadStandardizedTemplates}
+              disabled={standardizedLoading}
+              className="px-4 py-2 border border-ese-ink-light rounded-lg hover:bg-ese-lang-50 disabled:opacity-50"
+              type="button"
+            >
+              {standardizedLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-ese-ink-navy mb-2">
+              Select Template
+            </label>
+            <select
+              value={standardizedSelection}
+              onChange={(e) => setStandardizedSelection(e.target.value)}
+              className="w-full px-4 py-2 border border-ese-ink-light rounded-lg focus:outline-none focus:ring-2 focus:ring-ese-lang-700"
+            >
+              <option value="">No standardized template</option>
+              {standardizedTemplates.map((template) => (
+                <option key={template.name} value={template.name}>
+                  {template.name} ({template.audience} • {template.term_type})
+                </option>
+              ))}
+            </select>
+            {standardizedSelection && (
+              <p className="text-xs text-ese-ink-medium mt-2">
+                Selected template will be auto-imported after survey creation. You can mix and match more sections later.
               </p>
             )}
           </div>

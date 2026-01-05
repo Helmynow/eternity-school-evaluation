@@ -70,7 +70,7 @@ export const EOMCategoryDistribution = ({ cycleId, type = 'winners' }) => {
   const { data, loading } = useAPI(
     () => type === 'winners' 
       ? apiClient.eom.getHallOfFame({ cycle_id: cycleId })
-      : apiClient.eom.getNominations(cycleId),
+      : apiClient.eom.getNominations(cycleId, { limit: 1000 }),
     { autoFetch: !!cycleId }
   )
 
@@ -80,7 +80,7 @@ export const EOMCategoryDistribution = ({ cycleId, type = 'winners' }) => {
     return <div className="text-ese-ink-blue text-center p-4">No data available</div>
   }
 
-  const items = type === 'winners' ? data.winners : data.nominations
+  const items = type === 'winners' ? data.winners : (data.nominations || data.items || data)
   if (!items || items.length === 0) {
     return <div className="text-ese-ink-blue text-center p-4">No {type} data available</div>
   }

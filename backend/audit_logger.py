@@ -99,7 +99,16 @@ class AuditLogger:
 
         return audit_entry
 
-    def log_create(self, entity_type: str, entity_id: int, user_email: str, description: Optional[str] = None) -> AuditLog:
+    def log_create(
+        self,
+        entity_type: str,
+        entity_id: int,
+        user_email: str,
+        description: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None,
+    ) -> AuditLog:
         """Log a create action"""
         return self.log_action(
             ActionType.CREATE,
@@ -107,10 +116,21 @@ class AuditLogger:
             entity_id,
             user_email,
             description=description or f"Created {entity_type} {entity_id}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_obj=request_obj,
         )
 
     def log_update(
-        self, entity_type: str, entity_id: int, user_email: str, changes: Dict[str, Any], description: Optional[str] = None
+        self,
+        entity_type: str,
+        entity_id: int,
+        user_email: str,
+        changes: Dict[str, Any],
+        description: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None,
     ) -> AuditLog:
         """Log an update action with before/after changes"""
         return self.log_action(
@@ -120,9 +140,21 @@ class AuditLogger:
             user_email,
             changes=changes,
             description=description or f"Updated {entity_type} {entity_id}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_obj=request_obj,
         )
 
-    def log_delete(self, entity_type: str, entity_id: int, user_email: str, description: Optional[str] = None) -> AuditLog:
+    def log_delete(
+        self,
+        entity_type: str,
+        entity_id: int,
+        user_email: str,
+        description: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None,
+    ) -> AuditLog:
         """Log a delete action"""
         return self.log_action(
             ActionType.DELETE,
@@ -130,9 +162,21 @@ class AuditLogger:
             entity_id,
             user_email,
             description=description or f"Deleted {entity_type} {entity_id}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_obj=request_obj,
         )
 
-    def log_submit(self, entity_type: str, entity_id: int, user_email: str, description: Optional[str] = None) -> AuditLog:
+    def log_submit(
+        self,
+        entity_type: str,
+        entity_id: int,
+        user_email: str,
+        description: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None,
+    ) -> AuditLog:
         """Log a submit action"""
         return self.log_action(
             ActionType.SUBMIT,
@@ -140,10 +184,20 @@ class AuditLogger:
             entity_id,
             user_email,
             description=description or f"Submitted {entity_type} {entity_id}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_obj=request_obj,
         )
 
     def log_view(
-        self, entity_type: str, entity_id: Optional[int], user_email: str, description: Optional[str] = None
+        self,
+        entity_type: str,
+        entity_id: Optional[int],
+        user_email: str,
+        description: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_obj: Optional[RequestType] = None,
     ) -> AuditLog:
         """Log a view action"""
         return self.log_action(
@@ -152,6 +206,9 @@ class AuditLogger:
             entity_id,
             user_email,
             description=description or f"Viewed {entity_type}" + (f" {entity_id}" if entity_id else ""),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_obj=request_obj,
         )
 
     def get_audit_history(

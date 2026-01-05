@@ -17,6 +17,26 @@ const showErrorOnce = (message, key) => {
   }
 }
 
+const withTimeout = (promise, ms) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+
+const getAccessTokenFromStorage = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const key = Object.keys(window.localStorage).find((k) => k.includes('auth-token'))
+    if (!key) return null
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return data?.access_token || null
+  } catch (error) {
+    return null
+  }
+}
+
 // Create axios instance with base configuration
 // IMPORTANT:
 // - In production, we must NOT default to localhost, otherwise the deployed app will try to call
@@ -58,14 +78,18 @@ api.interceptors.request.use(
     
     // Get token from Supabase session (v2 compatible)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.access_token) {
-        config.headers.Authorization = `Bearer ${session.access_token}`
+      const { data: { session } } = await withTimeout(supabase.auth.getSession(), 2000)
+      const token = session?.access_token || getAccessTokenFromStorage()
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
       }
     } catch (error) {
-      // If session retrieval fails, continue without auth token
-      // The backend will handle unauthorized requests appropriately
-      console.warn('Failed to retrieve auth session:', error)
+      const token = getAccessTokenFromStorage()
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      } else {
+        console.warn('Failed to retrieve auth session:', error)
+      }
     }
 
     // Optional API key for backend auth
@@ -89,6 +113,15 @@ api.interceptors.response.use(
     // Track performance
     if (window.trackAPIRequest) {
       window.trackAPIRequest(response.config.url, duration, response.status)
+    }
+
+    // Unwrap standardized API envelope if present
+    const payload = response.data
+    if (payload && typeof payload === 'object' && 'success' in payload && ('data' in payload || 'error' in payload)) {
+      response.apiSuccess = payload.success
+      response.apiError = payload.error || null
+      response.apiMeta = payload.meta || null
+      response.data = payload.data
     }
     
     return response
@@ -119,32 +152,35 @@ api.interceptors.response.use(
     if (error.response) {
       // Server responded with error status
       const { status, data } = error.response
-      
+      const apiErrorMessage = data?.error?.message || data?.message || data?.detail
+
       // Only show toast for unexpected errors
       if (!isExpected404) {
         const errorKey = `${status}-${error.config?.url}`
         switch (status) {
           case 401:
-            showErrorOnce('Authentication required. Please log in.', errorKey)
+            showErrorOnce(apiErrorMessage || 'Authentication required. Please log in.', errorKey)
             // Redirect to login
             window.location.href = '/login'
             break
           case 403:
-            showErrorOnce('You do not have permission to perform this action.', errorKey)
+            showErrorOnce(apiErrorMessage || 'You do not have permission to perform this action.', errorKey)
             break
           case 404:
             // Don't show error for expected 404s (like no cycles)
             break
           case 422:
             // Validation errors
-            const message = data?.detail || data?.message || 'Validation error'
-            showErrorOnce(typeof message === 'string' ? message : JSON.stringify(message), errorKey)
+            const message = apiErrorMessage || 'Validation error'
+            const details = data?.error?.details
+            const formatted = details ? `${message}: ${JSON.stringify(details)}` : message
+            showErrorOnce(formatted, errorKey)
             break
           case 500:
-            showErrorOnce('Server error. Please try again later.', errorKey)
+            showErrorOnce(apiErrorMessage || 'Server error. Please try again later.', errorKey)
             break
           default:
-            showErrorOnce(data?.message || `Error: ${status}`, errorKey)
+            showErrorOnce(apiErrorMessage || `Error: ${status}`, errorKey)
         }
       }
     } else if (error.request) {
@@ -181,7 +217,8 @@ export const apiClient = {
     validateNomination: (data) => api.post('/api/v2/eom/nominations/validate', data),
     
     // Get nominations for cycle
-    getNominations: (cycleId) => api.get(`/api/v2/eom/nominations/cycle/${cycleId}`),
+    getNominations: (cycleId, params = {}) =>
+      api.get(`/api/v2/eom/nominations/cycle/${cycleId}`, { params }),
     
     // Submit vote
     submitVote: (data) => api.post('/api/v2/eom/vote', data),
@@ -320,9 +357,18 @@ export const apiClient = {
     create: (data, params) => api.post('/api/v2/surveys', data, { params }),
     update: (id, data) => api.put(`/api/v2/surveys/${id}`, data),
     getQuestions: (surveyId) => api.get(`/api/v2/surveys/${surveyId}/questions`),
+    createQuestion: (surveyId, data) => api.post(`/api/v2/surveys/${surveyId}/questions`, data),
+    bulkCreateQuestions: (surveyId, data) => api.post(`/api/v2/surveys/${surveyId}/questions/bulk`, data),
+    updateQuestion: (surveyId, questionId, data) =>
+      api.put(`/api/v2/surveys/${surveyId}/questions/${questionId}`, data),
+    deleteQuestion: (surveyId, questionId) =>
+      api.delete(`/api/v2/surveys/${surveyId}/questions/${questionId}`),
+    reorderQuestions: (surveyId, data) =>
+      api.put(`/api/v2/surveys/${surveyId}/questions/reorder`, data),
     getResponses: (surveyId, params) => api.get(`/api/v2/surveys/${surveyId}/responses`, { params }),
     submitResponse: (data) => api.post('/api/v2/surveys/responses', data),
     getAnalytics: (surveyId) => api.get(`/api/v2/surveys/${surveyId}/analytics`),
+    getAbandonmentAnalytics: (params) => api.get('/api/v2/surveys/admin/abandonment-analytics', { params }),
   },
   
   // Survey Identity Endpoints
@@ -344,6 +390,8 @@ export const apiClient = {
     getSection: (category, identityMode = 'identified') => api.get(`/api/v2/survey-templates/section/${category}`, {
       params: { identity_mode: identityMode }
     }),
+    getStandardized: (params = {}) => api.get('/api/v2/survey-templates/standardized', { params }),
+    scoreStandardized: (data) => api.post('/api/v2/survey-templates/standardized/score', data),
   },
   
   // Identity Preferences (alias for surveyIdentity for backward compatibility)

@@ -1,0 +1,134 @@
+@startuml
+title UI / API Map (best-effort scan)
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+package "Frontend Routes" {
+  ["*"] as route_6699552
+  ["/"] as route_9288013
+  ["/admin/announcements"] as route_3920859
+  ["/admin/cycles"] as route_9053299
+  ["/admin/dashboard"] as route_6136689
+  ["/admin/import"] as route_2423906
+  ["/admin/integration"] as route_6276861
+  ["/admin/objections"] as route_887665
+  ["/admin/settings"] as route_2945808
+  ["/admin/staff"] as route_6850610
+  ["/eom/diversity"] as route_6057050
+  ["/eom/feedback"] as route_599355
+  ["/eom/hall-of-fame"] as route_3979141
+  ["/eom/nominate"] as route_7897315
+  ["/eom/vote"] as route_1044392
+  ["/forgot-password"] as route_2166919
+  ["/history"] as route_2094910
+  ["/login"] as route_3681972
+  ["/mre/evaluate"] as route_1312796
+  ["/notifications"] as route_4110032
+  ["/reports"] as route_1162521
+  ["/reset-password"] as route_360840
+  ["/survey"] as route_8096163
+  ["/survey/:surveyId"] as route_8790643
+  ["/survey/:surveyId/analytics"] as route_922246
+  ["/survey/:surveyId/edit"] as route_6403558
+  ["/survey/:surveyId/questions"] as route_3194690
+  ["/survey/:surveyId/responses"] as route_1959192
+  ["/survey/create"] as route_6384187
+  ["/survey/test/:surveyId?"] as route_7442843
+}
+
+package "API Calls (from frontend)" {
+  ["/api/v2/admin/dashboard"] as api_4740455
+  ["/api/v2/admin/dashboard/identity-analytics"] as api_3407056
+  ["/api/v2/admin/dashboard/overview-cards"] as api_4031442
+  ["/api/v2/admin/dashboard/real-time-metrics"] as api_9581469
+  ["/api/v2/admin/settings"] as api_2844990
+  ["/api/v2/analytics/bias/${cycleId}"] as api_1224237
+  ["/api/v2/analytics/eom/${cycleId}"] as api_8451926
+  ["/api/v2/analytics/mre/${cycleId}"] as api_9239699
+  ["/api/v2/analytics/participation/${cycleId}"] as api_9799671
+  ["/api/v2/announcements"] as api_3752984
+  ["/api/v2/announcements/${id}"] as api_9510095
+  ["/api/v2/audit-logs"] as api_7299780
+  ["/api/v2/bias/360/context-aware-report/${cycleId}"] as api_4706626
+  ["/api/v2/bias/reports/${cycleId}"] as api_708984
+  ["/api/v2/bias/reports/${cycleId}/target/${email}"] as api_7485337
+  ["/api/v2/bias/reports/generate"] as api_2118611
+  ["/api/v2/cycles"] as api_3658250
+  ["/api/v2/cycles/${id}"] as api_2149742
+  ["/api/v2/cycles/current"] as api_5089515
+  ["/api/v2/dashboard/analytics/${cycleId}"] as api_1055339
+  ["/api/v2/dashboard/participation/${cycleId}"] as api_1656458
+  ["/api/v2/eom/cycles/${cycleId}/window-status"] as api_3775162
+  ["/api/v2/eom/diversity-tracking"] as api_5548759
+  ["/api/v2/eom/feedback"] as api_8924475
+  ["/api/v2/eom/hall-of-fame"] as api_4010171
+  ["/api/v2/eom/nominations/cycle/${cycleId}"] as api_8160750
+  ["/api/v2/eom/nominations/submit"] as api_8191865
+  ["/api/v2/eom/nominations/suggest-category"] as api_2382615
+  ["/api/v2/eom/nominations/validate"] as api_2981229
+  ["/api/v2/eom/rotation-rules/analytics/${cycleId}"] as api_3899473
+  ["/api/v2/eom/rotation-rules/eligible-nominees/${cycleId}"] as api_6739680
+  ["/api/v2/eom/vote"] as api_8508701
+  ["/api/v2/eom/winners/${cycleId}"] as api_4630472
+  ["/api/v2/evaluation-matrix/${cycleId}"] as api_303297
+  ["/api/v2/hybrid-identity/analyze-survey-data"] as api_5112932
+  ["/api/v2/hybrid-identity/create-survey-session"] as api_501892
+  ["/api/v2/hybrid-identity/initialize-session"] as api_5066852
+  ["/api/v2/hybrid-identity/process-reveal-request"] as api_9744461
+  ["/api/v2/hybrid-identity/submit-response"] as api_2188732
+  ["/api/v2/hybrid-identity/switch-mode"] as api_5548146
+  ["/api/v2/import/eom-candidates"] as api_192707
+  ["/api/v2/import/eom-voters"] as api_1609451
+  ["/api/v2/import/staff"] as api_966416
+  ["/api/v2/import/weight-matrix"] as api_3587976
+  ["/api/v2/integration/evaluation-bridge"] as api_2247655
+  ["/api/v2/integration/hr/setup"] as api_3995838
+  ["/api/v2/integration/sync/evaluation"] as api_9513566
+  ["/api/v2/integration/sync/staff"] as api_9613056
+  ["/api/v2/mre/assignments/${cycleId}"] as api_6118800
+  ["/api/v2/mre/domains/${targetGroup}"] as api_1982060
+  ["/api/v2/mre/evaluations/${cycleId}/weighted-scores"] as api_4663975
+  ["/api/v2/mre/evaluations/process"] as api_6730232
+  ["/api/v2/notifications"] as api_4990234
+  ["/api/v2/notifications/${id}/read"] as api_187026
+  ["/api/v2/notifications/mark-read"] as api_5688111
+  ["/api/v2/notifications/read-all"] as api_4473140
+  ["/api/v2/notifications/unread-count"] as api_5391959
+  ["/api/v2/objections"] as api_1569832
+  ["/api/v2/objections/${id}"] as api_3514185
+  ["/api/v2/objections/${id}/resolve"] as api_3996055
+  ["/api/v2/people"] as api_5397970
+  ["/api/v2/people/${email}"] as api_4142942
+  ["/api/v2/people/${encodeURIComponent(email)}"] as api_6891694
+  ["/api/v2/people/segment/${segment}"] as api_5120348
+  ["/api/v2/reports/bias/${cycleId}"] as api_2097108
+  ["/api/v2/reports/ceo/${cycleId}"] as api_6205963
+  ["/api/v2/reports/ceo/export"] as api_6041233
+  ["/api/v2/reports/participation/${cycleId}"] as api_3129833
+  ["/api/v2/staff/${email}/assign-evaluators"] as api_8471446
+  ["/api/v2/staff/${email}/evaluation-status"] as api_6757927
+  ["/api/v2/staff/${email}/evaluators"] as api_9212548
+  ["/api/v2/survey-templates/comprehensive"] as api_3948822
+  ["/api/v2/survey-templates/section/${category}"] as api_5320376
+  ["/api/v2/survey/identity/conditional-reveal"] as api_1545908
+  ["/api/v2/survey/identity/conditional-reveal/check-triggers/${userEmail}"] as api_4690708
+  ["/api/v2/survey/identity/conditional-reveal/execute/${userEmail}"] as api_7970233
+  ["/api/v2/survey/identity/preference"] as api_967652
+  ["/api/v2/survey/identity/reveal"] as api_4046890
+  ["/api/v2/survey/identity/revoke-anonymity"] as api_3504211
+  ["/api/v2/survey/identity/status/${userEmail}"] as api_531213
+  ["/api/v2/surveys"] as api_2217192
+  ["/api/v2/surveys/${id}"] as api_2589108
+  ["/api/v2/surveys/${surveyId}/analytics"] as api_6655923
+  ["/api/v2/surveys/${surveyId}/questions"] as api_2005989
+  ["/api/v2/surveys/${surveyId}/responses"] as api_9741349
+  ["/api/v2/surveys/responses"] as api_2508349
+  ["/api/v2/system/go-live-checklist"] as api_8780973
+  ["/api/v2/system/setup"] as api_9567497
+}
+
+note bottom
+This diagram is generated heuristically. Use ui_mapping_matrix.csv for full traceability.
+end note
+@enduml

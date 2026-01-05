@@ -20,7 +20,6 @@ const ActionItems = ({ items }) => {
     }
 
     loadActionItems()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, items])
 
   const loadActionItems = async () => {

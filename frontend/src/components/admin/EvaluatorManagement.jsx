@@ -19,7 +19,6 @@ const EvaluatorManagement = ({ staffEmail, staffName, onClose, cycleId }) => {
       loadAllStaff()
       loadCurrentCycle()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [staffEmail])  // Only depend on staffEmail to avoid infinite loop
 
   const loadCurrentCycle = async () => {
@@ -365,9 +364,12 @@ const EvaluatorManagement = ({ staffEmail, staffName, onClose, cycleId }) => {
 }
 
 const EditAssignmentForm = ({ assignment, allStaff, raterContextOptions, onSave, onCancel }) => {
-  const [raterEmail, setRaterEmail] = useState(assignment.rater_email)
-  const [raterContext, setRaterContext] = useState(assignment.rater_context)
-  const [weight, setWeight] = useState(assignment.weight)
+  // Keep selects controlled from the first render (avoid uncontrolled->controlled warnings)
+  const [raterEmail, setRaterEmail] = useState(assignment?.rater_email ?? '')
+  const [raterContext, setRaterContext] = useState(assignment?.rater_context ?? '')
+  const [weight, setWeight] = useState(
+    Number.isFinite(Number(assignment?.weight)) ? Number(assignment.weight) : 0.0
+  )
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -389,7 +391,7 @@ const EditAssignmentForm = ({ assignment, allStaff, raterContextOptions, onSave,
           Evaluator
         </label>
         <select
-          value={raterEmail}
+          value={raterEmail || ''}
           onChange={(e) => setRaterEmail(e.target.value)}
           className="w-full px-4 py-2 border border-ese-accent-beige rounded-lg"
           required
@@ -408,7 +410,7 @@ const EditAssignmentForm = ({ assignment, allStaff, raterContextOptions, onSave,
           Evaluator Type
         </label>
         <select
-          value={raterContext}
+          value={raterContext || ''}
           onChange={(e) => handleContextChange(e.target.value)}
           className="w-full px-4 py-2 border border-ese-accent-beige rounded-lg"
           required

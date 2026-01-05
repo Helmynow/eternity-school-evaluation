@@ -40,7 +40,6 @@ export const useAPI = (endpoint, options = {}) => {
     if (options.autoFetch !== false && !hasFetched.current && !isFetching.current) {
       fetchData()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only run once on mount - endpoint function reference is stable
 
   const refetch = useCallback(() => {

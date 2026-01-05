@@ -14,7 +14,14 @@ const SurveyResponseReview = () => {
   const [responses, setResponses] = useState([])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingResponses, setLoadingResponses] = useState(false)
   const [selectedResponseId, setSelectedResponseId] = useState(null)
+  const [pageMeta, setPageMeta] = useState({
+    skip: 0,
+    limit: 200,
+    total: 0,
+    has_more: false,
+  })
   const [filter, setFilter] = useState({
     identity_mode: 'all',
     date_from: '',
@@ -33,17 +40,22 @@ const SurveyResponseReview = () => {
     }
   }, [surveyId, isCEO, isPNC, navigate])
 
+  useEffect(() => {
+    if (!surveyId) return
+    // When filters change, reload from the first page using server-side filters.
+    loadResponsesPage(0, pageMeta.limit, filter)
+  }, [filter, surveyId])
+
   const loadData = async () => {
     setLoading(true)
     try {
-      const [surveyRes, questionsRes, responsesRes] = await Promise.all([
+      const [surveyRes, questionsRes] = await Promise.all([
         apiClient.survey.getById(surveyId),
         apiClient.survey.getQuestions(surveyId),
-        apiClient.survey.getResponses(surveyId),
       ])
       setSurvey(surveyRes.data)
       setQuestions(questionsRes.data || [])
-      setResponses(responsesRes.data || [])
+      await loadResponsesPage(0, pageMeta.limit, filter)
     } catch (error) {
       toast.error('Failed to load survey responses')
       console.error('Error loading responses:', error)
@@ -52,20 +64,60 @@ const SurveyResponseReview = () => {
     }
   }
 
+  const loadResponsesPage = async (skip, limit, currentFilter) => {
+    setLoadingResponses(true)
+    try {
+      const params = { skip, limit }
+      const fm = currentFilter?.identity_mode
+      if (fm && fm !== 'all') params.identity_mode = fm
+      if (currentFilter?.date_from) params.date_from = currentFilter.date_from
+      if (currentFilter?.date_to) params.date_to = currentFilter.date_to
+
+      const responsesRes = await apiClient.survey.getResponses(surveyId, params)
+      const payload = responsesRes.data || {}
+      setResponses(payload.responses || [])
+      setPageMeta({
+        skip: payload.skip ?? skip,
+        limit: payload.limit ?? limit,
+        total: payload.total ?? 0,
+        has_more: Boolean(payload.has_more),
+      })
+      setSelectedResponseId(null)
+    } catch (error) {
+      toast.error('Failed to load responses')
+      console.error('Error loading responses page:', error)
+    } finally {
+      setLoadingResponses(false)
+    }
+  }
+
+  const fetchAllResponsesForExport = async (currentFilter) => {
+    const all = []
+    let skip = 0
+    const limit = 1000
+
+    // Hard safety cap to avoid accidental infinite loops
+    const maxPages = 200
+    for (let i = 0; i < maxPages; i++) {
+      const params = { skip, limit }
+      const fm = currentFilter?.identity_mode
+      if (fm && fm !== 'all') params.identity_mode = fm
+      if (currentFilter?.date_from) params.date_from = currentFilter.date_from
+      if (currentFilter?.date_to) params.date_to = currentFilter.date_to
+
+      const res = await apiClient.survey.getResponses(surveyId, params)
+      const payload = res.data || {}
+      const batch = payload.responses || []
+      all.push(...batch)
+      if (!payload.has_more) break
+      skip += limit
+    }
+    return all
+  }
+
   const handleExport = async () => {
     try {
-      const filteredResponses = responses.filter((r) => {
-        if (filter.identity_mode !== 'all' && r.identity_mode !== filter.identity_mode) {
-          return false
-        }
-        if (filter.date_from && new Date(r.submitted_at) < new Date(filter.date_from)) {
-          return false
-        }
-        if (filter.date_to && new Date(r.submitted_at) > new Date(filter.date_to)) {
-          return false
-        }
-        return true
-      })
+      const filteredResponses = await fetchAllResponsesForExport(filter)
 
       const exportData = {
         survey: {
@@ -122,18 +174,10 @@ const SurveyResponseReview = () => {
     return String(value)
   }
 
-  const filteredResponses = responses.filter((r) => {
-    if (filter.identity_mode !== 'all' && r.identity_mode !== filter.identity_mode) {
-      return false
-    }
-    if (filter.date_from && new Date(r.submitted_at) < new Date(filter.date_from)) {
-      return false
-    }
-    if (filter.date_to && new Date(r.submitted_at) > new Date(filter.date_to)) {
-      return false
-    }
-    return true
-  })
+  const filteredResponses = responses
+
+  const showingFrom = pageMeta.total > 0 ? pageMeta.skip + 1 : 0
+  const showingTo = Math.min(pageMeta.skip + responses.length, pageMeta.total)
 
   if (loading) {
     return (
@@ -158,7 +202,7 @@ const SurveyResponseReview = () => {
               {survey?.title} - Response Review
             </h1>
             <p className="text-ese-ink-medium mt-1">
-              {filteredResponses.length} of {responses.length} responses
+              Showing {showingFrom}-{showingTo} of {pageMeta.total} responses
             </p>
           </div>
           <button
@@ -292,6 +336,29 @@ const SurveyResponseReview = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-ese-ink-light">
+            <div className="text-sm text-ese-ink-medium">
+              Page size: {pageMeta.limit}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => loadResponsesPage(Math.max(0, pageMeta.skip - pageMeta.limit), pageMeta.limit, filter)}
+                disabled={loadingResponses || pageMeta.skip === 0}
+                className="px-4 py-2 rounded-lg border border-ese-ink-light text-ese-ink-navy disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ese-lang-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => loadResponsesPage(pageMeta.skip + pageMeta.limit, pageMeta.limit, filter)}
+                disabled={loadingResponses || !pageMeta.has_more}
+                className="px-4 py-2 rounded-lg bg-ese-lang-900 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-ese-lang-800"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>

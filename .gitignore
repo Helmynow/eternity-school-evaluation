@@ -68,3 +68,10 @@ htmlcov/
 .hypothesis/
 .pytest_cache/
 .vercel
+
+# Playwright / E2E outputs
+frontend/playwright-report/
+frontend/test-results/
+
+# Supabase CLI local metadata
+supabase/.temp/

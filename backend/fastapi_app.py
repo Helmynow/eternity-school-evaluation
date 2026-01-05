@@ -11,7 +11,7 @@ import os
 import secrets
 from datetime import date, datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -19,12 +19,14 @@ import requests
 # Initialize Sentry SDK before FastAPI app
 import sentry_sdk
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 # MCP integration is optional
@@ -40,6 +42,27 @@ except (ImportError, Exception):
 SENTRY_DSN = os.getenv("SENTRY_DSN")  # No default - must be set via environment variable
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_PRODUCTION = ENVIRONMENT == "production"
+
+
+def _get_int_env(name: str, default: int, *, min_value: int = 0, max_value: int = 10_000) -> int:
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        value = default
+    else:
+        try:
+            value = int(str(raw).strip())
+        except Exception:
+            value = default
+    if value < min_value:
+        return min_value
+    if value > max_value:
+        return max_value
+    return value
+
+
+# Survey session timeout (idle) used for abandonment analytics.
+SURVEY_SESSION_TIMEOUT_MINUTES = _get_int_env("SURVEY_SESSION_TIMEOUT_MINUTES", 30, min_value=1, max_value=24 * 60)
+SURVEY_SESSION_TIMEOUT = timedelta(minutes=SURVEY_SESSION_TIMEOUT_MINUTES)
 
 
 def _get_sample_rate(env_value: Optional[str], default_value: float) -> float:
@@ -123,6 +146,7 @@ from backend.optimized_evaluation_calculator import OptimizedEvaluationCalculato
 from backend.participation_analytics import ParticipationAnalytics
 from backend.smart_notification_system import SmartNotificationSystem
 from backend.survey_identity_manager import SurveyIdentityManager
+from backend.standardized_survey_templates import get_standardized_surveys, score_standardized_survey_responses
 from backend.survey_templates import EternitySchoolSurveyTemplates
 from backend.system_setup import EternitySchoolSystemSetup
 from backend.weight_matrix_handler import WeightMatrixHandler
@@ -223,6 +247,19 @@ def _require_admin_access(request: Request, db: Session) -> str:
     if not (rbac.is_super_admin(user_email) or role in ("ceo", "pnc")):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user_email
+
+
+def _require_survey_builder_access(request: Request, db: Session) -> str:
+    """Survey builder access (create/edit surveys and questions)."""
+    from backend.rbac_system import PermissionType, RBACSystem
+
+    user_email = _require_authenticated_email(request)
+    rbac = RBACSystem(db)
+    if rbac.is_super_admin(user_email):
+        return user_email
+    if rbac.has_permission(user_email, PermissionType.CREATE_SURVEY):
+        return user_email
+    raise HTTPException(status_code=403, detail="Survey builder access required")
 
 
 def _hash_session_token(token: str) -> str:
@@ -385,12 +422,145 @@ app.add_middleware(
 )
 
 
+def _error_code_for_status(status_code: int) -> str:
+    return {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+        429: "rate_limited",
+        500: "internal_error",
+        503: "service_unavailable",
+    }.get(status_code, "error")
+
+
+def _build_error_payload(
+    *,
+    status_code: int,
+    message: str,
+    details: Optional[Any] = None,
+    code: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload = APIResponse(
+        success=False,
+        error=APIError(
+            code=code or _error_code_for_status(status_code),
+            message=message,
+            details=details,
+        ),
+    )
+    return payload.model_dump()
+
+
+def _envelope_response_headers(headers) -> Dict[str, str]:
+    return {k: v for k, v in headers.items() if k.lower() != "content-length"}
+
+
+@app.middleware("http")
+async def api_response_envelope_middleware(request: Request, call_next):
+    """Wrap JSON responses in a standard envelope for consistency."""
+    skip_paths = {"/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"}
+    if request.url.path in skip_paths:
+        return await call_next(request)
+
+    response = await call_next(request)
+
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return response
+
+    if response.status_code == status.HTTP_204_NO_CONTENT:
+        return response
+
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+
+    if not body:
+        return response
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return response
+
+    if isinstance(payload, dict) and "success" in payload and ("data" in payload or "error" in payload):
+        return JSONResponse(
+            status_code=response.status_code,
+            content=payload,
+            headers=_envelope_response_headers(response.headers),
+            background=response.background,
+        )
+
+    if response.status_code >= 400:
+        message = payload.get("detail") if isinstance(payload, dict) else None
+        if not message and isinstance(payload, dict):
+            message = payload.get("message")
+        if not message and isinstance(payload, str):
+            message = payload
+        wrapped = _build_error_payload(
+            status_code=response.status_code,
+            message=message or "Request failed",
+            details=None if isinstance(payload, str) else payload,
+        )
+    else:
+        wrapped = APIResponse(
+            success=True,
+            data=payload,
+        ).model_dump()
+
+    return JSONResponse(
+        status_code=response.status_code,
+        content=wrapped,
+        headers=_envelope_response_headers(response.headers),
+        background=response.background,
+    )
+
+
+# Validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    payload = _build_error_payload(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        message="Validation error",
+        details=exc.errors(),
+    )
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=payload)
+
+
+# HTTP errors
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    status_code = exc.status_code
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else "Request failed"
+    details = None if isinstance(detail, str) else detail
+
+    if IS_PRODUCTION and status_code >= 500:
+        message = "Internal server error"
+        details = None
+
+    payload = _build_error_payload(
+        status_code=status_code,
+        message=message,
+        details=details,
+    )
+    return JSONResponse(status_code=status_code, content=payload)
+
+
 # Generic error handler (hide details in production)
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    if IS_PRODUCTION:
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    logger.error("Unhandled exception: %s", str(exc), exc_info=True)
+    message = "Internal server error" if IS_PRODUCTION else str(exc)
+    payload = _build_error_payload(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        message=message,
+        details=None if IS_PRODUCTION else {"error": str(exc)},
+    )
+    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=payload)
 
 
 # Sentry debug route for testing (disabled in production)
@@ -489,6 +659,33 @@ class MREEvaluationResponse(BaseModel):
     status: str
 
 
+class ErrorSeverity(str, Enum):
+    """Error severity levels for API responses."""
+
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+
+class APIError(BaseModel):
+    """Standard error payload."""
+
+    code: str
+    message: str
+    severity: ErrorSeverity = ErrorSeverity.ERROR
+    details: Optional[Any] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+class APIResponse(BaseModel):
+    """Standard API response envelope."""
+
+    success: bool
+    data: Optional[Any] = None
+    error: Optional[APIError] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
 class BiasReportRequest(BaseModel):
     """Request model for bias detection report"""
 
@@ -540,17 +737,24 @@ def _resolve_eom_cycle_id(db: Session, cycle_or_eom_cycle_id: int) -> int:
     - otherwise, treat it as Cycle.id and pick (or create) the latest EOMCycle for that Cycle
     """
     # Direct match (EOMCycle.id)
-    existing = db.query(EOMCycle).filter(EOMCycle.id == cycle_or_eom_cycle_id).first()
+    existing = (
+        db.query(EOMCycle)
+        .filter(EOMCycle.id == cycle_or_eom_cycle_id, EOMCycle.deleted_at.is_(None))
+        .first()
+    )
     if existing:
         return existing.id
 
     # Treat as Cycle.id
-    cycle = db.query(Cycle).filter(Cycle.id == cycle_or_eom_cycle_id).first()
+    cycle = db.query(Cycle).filter(Cycle.id == cycle_or_eom_cycle_id, Cycle.deleted_at.is_(None)).first()
     if not cycle:
         raise HTTPException(status_code=404, detail="EOM cycle not found")
 
     latest = (
-        db.query(EOMCycle).filter(EOMCycle.cycle_id == cycle.id).order_by(EOMCycle.year.desc(), EOMCycle.month.desc()).first()
+        db.query(EOMCycle)
+        .filter(EOMCycle.cycle_id == cycle.id, EOMCycle.deleted_at.is_(None))
+        .order_by(EOMCycle.year.desc(), EOMCycle.month.desc())
+        .first()
     )
     if latest:
         return latest.id
@@ -574,6 +778,45 @@ def _require_eom_access(request: Request, db: Session) -> str:
     if not (rbac.is_super_admin(user_email) or role in ("ceo", "pnc", "department_head")):
         raise HTTPException(status_code=403, detail="EOM access required")
     return user_email
+
+
+def _extract_request_meta(request: Request) -> tuple[Optional[str], Optional[str]]:
+    """Extract client IP and user agent for audit logging."""
+    if request is None:
+        return None, None
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ip_address = forwarded_for.split(",")[0].strip()
+    else:
+        ip_address = request.headers.get("x-real-ip") or (request.client.host if request.client else None)
+
+    user_agent = request.headers.get("user-agent")
+    return ip_address, user_agent
+
+
+def _coerce_eom_category(value: Optional[object]) -> Optional[EOMCategory]:
+    """Normalize a category input to the EOMCategory enum."""
+    if value is None:
+        return None
+    if isinstance(value, EOMCategory):
+        return value
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    normalized = raw.upper().replace(" ", "_")
+    try:
+        return EOMCategory[normalized]
+    except Exception:
+        pass
+
+    for category in EOMCategory:
+        if category.value.lower() == raw.lower():
+            return category
+
+    return None
 
 
 @app.post("/api/v2/eom/nominations/suggest-category")
@@ -615,50 +858,70 @@ async def submit_eom_nomination(
     try:
         nominator_email = _require_eom_access(request, db)
         resolved_eom_cycle_id = _resolve_eom_cycle_id(db, nomination.eom_cycle_id)
+        ip_address, user_agent = _extract_request_meta(request)
 
         # Initialize validator and recommender
         validator = EOMNominationValidator(db)
         audit_logger = AuditLogger(db)
         recommender = EOMCategoryRecommender()
 
-        # Auto-suggest category if not provided
-        if not nomination.category and nomination.nomination_reason:
+        # Normalize category and auto-suggest if missing
+        normalized_category = _coerce_eom_category(nomination.category)
+        if not normalized_category and nomination.nomination_reason:
             # Get nominee role for better suggestions
             nominee = db.query(Person).filter(Person.email == nomination.nominee_email).first()
             nominee_role = nominee.role_title if nominee else None
 
             suggestion = recommender.suggest_category(nomination.nomination_reason, nominee_role)
             if suggestion.get("recommended_category") and suggestion.get("confidence_score", 0) > 0.5:
-                # Map string category to enum
                 try:
-                    category_str = suggestion["recommended_category"].upper()
-                    # Handle different naming conventions - map to actual enum values
-                    category_map = {
-                        "OUTSTANDING_LEADERSHIP": EOMCategory.OUTSTANDING_LEADERSHIP,
-                        "TEAM_SPIRIT": EOMCategory.TEAM_SPIRIT,
-                        "INNOVATION": EOMCategory.INNOVATION,
-                        "RISING_STAR": EOMCategory.RISING_STAR,
-                        "SERVICE_EXCELLENCE": EOMCategory.SERVICE_EXCELLENCE,
-                    }
-                    # Also try direct mapping
-                    if category_str in category_map:
-                        nomination.category = category_map[category_str]
-                    else:
-                        nomination.category = EOMCategory[category_str]
+                    normalized_category = _coerce_eom_category(suggestion["recommended_category"])
                 except (KeyError, AttributeError, TypeError):
-                    pass  # Keep original category if mapping fails
+                    normalized_category = None
 
-        # Validate nomination
+        if not normalized_category:
+            return EOMNominationResponse(
+                nomination_id=0,
+                is_valid=False,
+                errors=["Category is required. Please select a category or provide a reason for auto-suggestion."],
+                warnings=[],
+                details={"category": None},
+            )
+
+        # Prevent duplicate nominations within the same cycle/category
+        existing = (
+            db.query(EOMNominee)
+            .filter(
+                EOMNominee.eom_cycle_id == resolved_eom_cycle_id,
+                EOMNominee.nominee_email == nomination.nominee_email,
+                EOMNominee.category == normalized_category,
+                EOMNominee.deleted_at.is_(None),
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if existing:
+            db.rollback()
+            return EOMNominationResponse(
+                nomination_id=0,
+                is_valid=False,
+                errors=["This nomination has already been submitted for this category and cycle."],
+                warnings=[],
+                details={"existing_nomination_id": existing.id},
+            )
+
+        # Validate nomination within transaction
         validation_result = validator.validate_nomination(
             nominee_email=nomination.nominee_email,
             eom_cycle_id=resolved_eom_cycle_id,
             nominated_by=nominator_email,
-            category=nomination.category.value if nomination.category else None,
+            category=normalized_category.value,
             check_attendance=nomination.check_attendance,
         )
 
-        # If validation fails, return error response
         if not validation_result.is_valid:
+            db.rollback()
             return EOMNominationResponse(
                 nomination_id=0,
                 is_valid=False,
@@ -673,7 +936,7 @@ async def submit_eom_nomination(
             nominee_email=nomination.nominee_email,
             nominated_by=nominator_email,
             nomination_reason=nomination.nomination_reason,
-            category=nomination.category,  # EOMCategory enum
+            category=normalized_category,
             rotation_eligible=True,
             votes_received=0,
         )
@@ -689,7 +952,11 @@ async def submit_eom_nomination(
             eom_nominee.id,
             nominator_email,
             f"Submitted EOM nomination for {nomination.nominee_email}",
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
+
+        logger.info("EOM nomination submitted: nominee=%s nominator=%s cycle=%s", nomination.nominee_email, nominator_email, resolved_eom_cycle_id)
 
         return EOMNominationResponse(
             nomination_id=eom_nominee.id,
@@ -703,8 +970,18 @@ async def submit_eom_nomination(
             },
         )
 
+    except IntegrityError:
+        db.rollback()
+        return EOMNominationResponse(
+            nomination_id=0,
+            is_valid=False,
+            errors=["This nomination already exists."],
+            warnings=[],
+            details={},
+        )
     except Exception as e:
         db.rollback()
+        logger.error("Error submitting nomination: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error submitting nomination: {str(e)}")
 
 
@@ -778,33 +1055,56 @@ async def validate_batch_nominations(
 
 
 @app.get("/api/v2/eom/nominations/cycle/{cycle_id}")
-async def list_eom_nominations_for_cycle(cycle_id: int, request: Request, db: Session = Depends(get_db)):
-    """List EOM nominations for the current EOM cycle (cycle_id may be Cycle.id or EOMCycle.id)."""
+async def list_eom_nominations_for_cycle(
+    cycle_id: int,
+    request: Request,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """List EOM nominations with pagination (cycle_id may be Cycle.id or EOMCycle.id)."""
     try:
         _require_eom_access(request, db)
         resolved_eom_cycle_id = _resolve_eom_cycle_id(db, cycle_id)
 
+        if skip < 0 or limit < 1 or limit > 1000:
+            raise HTTPException(status_code=422, detail="Invalid pagination parameters")
+
+        base_query = db.query(EOMNominee).filter(
+            EOMNominee.eom_cycle_id == resolved_eom_cycle_id,
+            EOMNominee.deleted_at.is_(None),
+        )
+
+        total = base_query.count()
         nominations = (
-            db.query(EOMNominee)
-            .filter(EOMNominee.eom_cycle_id == resolved_eom_cycle_id)
-            .order_by(EOMNominee.created_at.desc())
+            base_query.order_by(EOMNominee.created_at.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
 
-        return [
-            {
-                "id": n.id,
-                "eom_cycle_id": n.eom_cycle_id,
-                "nominee_email": n.nominee_email,
-                "nominee_name": n.nominee_person.full_name if n.nominee_person else None,
-                "nominated_by": n.nominated_by,
-                "nomination_reason": n.nomination_reason,
-                "category": n.category.value if hasattr(n.category, "value") else n.category,
-                "votes_received": n.votes_received,
-                "created_at": n.created_at.isoformat() if n.created_at else None,
-            }
-            for n in nominations
-        ]
+        return {
+            "nominations": [
+                {
+                    "id": n.id,
+                    "eom_cycle_id": n.eom_cycle_id,
+                    "nominee_email": n.nominee_email,
+                    "nominee_name": n.nominee_person.full_name if n.nominee_person else None,
+                    "nominated_by": n.nominated_by,
+                    "nomination_reason": n.nomination_reason,
+                    "category": n.category.value if hasattr(n.category, "value") else n.category,
+                    "votes_received": n.votes_received,
+                    "created_at": n.created_at.isoformat() if n.created_at else None,
+                }
+                for n in nominations
+            ],
+            "pagination": {
+                "skip": skip,
+                "limit": limit,
+                "total": total,
+                "has_more": (skip + limit) < total,
+            },
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -825,28 +1125,46 @@ async def submit_eom_vote(vote: EOMVoteRequest, request: Request, db: Session = 
             .first()
         )
         if existing_vote:
-            raise HTTPException(status_code=400, detail="You have already voted in this EOM cycle")
+            raise HTTPException(status_code=409, detail="You have already voted in this EOM cycle")
 
         nominee = (
             db.query(EOMNominee)
-            .filter(EOMNominee.eom_cycle_id == resolved_eom_cycle_id, EOMNominee.nominee_email == vote.nominee_email)
+            .filter(
+                EOMNominee.eom_cycle_id == resolved_eom_cycle_id,
+                EOMNominee.nominee_email == vote.nominee_email,
+                EOMNominee.deleted_at.is_(None),
+            )
+            .with_for_update()
             .first()
         )
         if not nominee:
             raise HTTPException(status_code=404, detail="Nominee not found for this EOM cycle")
 
-        # Atomic update to prevent race conditions
-        nominee.votes_received = EOMNominee.votes_received + 1
-
-        vote_record = EOMVoter(eom_cycle_id=resolved_eom_cycle_id, voter_email=voter_email)
+        vote_record = EOMVoter(
+            eom_cycle_id=resolved_eom_cycle_id,
+            voter_email=voter_email,
+            nominee_email=vote.nominee_email,
+        )
         db.add(vote_record)
+
+        db.query(EOMNominee).filter(EOMNominee.id == nominee.id).update(
+            {EOMNominee.votes_received: EOMNominee.votes_received + 1},
+            synchronize_session=False,
+        )
+
         db.commit()
 
+        logger.info("EOM vote submitted: voter=%s nominee=%s cycle=%s", voter_email, vote.nominee_email, resolved_eom_cycle_id)
+
         return {"success": True, "message": "Vote submitted successfully"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="You have already voted in this EOM cycle")
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
+        logger.error("Error submitting vote: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error submitting vote: {str(e)}")
 
 
@@ -1266,9 +1584,15 @@ async def process_mre_evaluation(
     """
     try:
         current_user_email = _require_authenticated_email(request)
+        ip_address, user_agent = _extract_request_meta(request)
 
         # Get assignment to determine weights
-        assignment = db.query(Assignment).filter(Assignment.id == evaluation.assignment_id).first()
+        assignment = (
+            db.query(Assignment)
+            .filter(Assignment.id == evaluation.assignment_id, Assignment.deleted_at.is_(None))
+            .with_for_update()
+            .first()
+        )
 
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
@@ -1320,6 +1644,16 @@ async def process_mre_evaluation(
             eval_record.id,
             rater_email,
             f"Processed MRE evaluation for {target_email} with weighted rating {weighted_rating:.2f}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        logger.info(
+            "MRE evaluation submitted: evaluation_id=%s assignment_id=%s rater=%s target=%s",
+            eval_record.id,
+            evaluation.assignment_id,
+            rater_email,
+            target_email,
         )
 
         return MREEvaluationResponse(
@@ -3801,6 +4135,106 @@ async def submit_survey_response(request: SurveyResponseRequest, http_request: R
 
         identity_mode = HybridIdentityMode(session_row.identity_mode or "conditional")
 
+        # Persist responses to the database so admin review/analytics can operate on hybrid flows.
+        survey_id = getattr(request, "survey_id", None) or getattr(session_row, "survey_id", None)
+        if not survey_id:
+            raise HTTPException(status_code=400, detail="survey_id is required (or must be associated with the session)")
+
+        normalized = {}
+        if request.question_id:
+            normalized[int(request.question_id)] = {
+                "response_text": request.response_text,
+                "response_value": request.response_value,
+            }
+        else:
+            for k, payload in (request.responses or {}).items():
+                try:
+                    qid = int(payload.get("question_id") or k)
+                except Exception:
+                    continue
+                normalized[qid] = {
+                    "response_text": payload.get("response_text"),
+                    "response_value": payload.get("response_value"),
+                }
+
+        if not normalized:
+            raise HTTPException(status_code=400, detail="No responses provided")
+
+        qids = sorted(set(normalized.keys()))
+        valid_count = (
+            db.query(func.count(SurveyQuestion.id))
+            .filter(SurveyQuestion.survey_id == survey_id, SurveyQuestion.id.in_(qids))
+            .scalar()
+        )
+        if int(valid_count or 0) != len(qids):
+            raise HTTPException(status_code=400, detail="One or more questions do not belong to the survey")
+
+        token_hash = _hash_session_token(request.session_token)
+        anonymous_id = f"anon_{token_hash[:16]}"
+        respondent_email = current_user_email if identity_mode == HybridIdentityMode.FULLY_IDENTIFIED else None
+        now = datetime.utcnow()
+
+        for qid, payload in normalized.items():
+            existing = (
+                db.query(SurveyResponse)
+                .filter(
+                    SurveyResponse.survey_id == survey_id,
+                    SurveyResponse.session_id == request.session_token,
+                    SurveyResponse.question_id == qid,
+                )
+                .first()
+            )
+            if existing:
+                existing.response_text = payload.get("response_text")
+                existing.response_value = payload.get("response_value")
+                existing.submitted_at = now
+                if getattr(existing, "session_status", None) is None:
+                    existing.session_status = "active"
+                if getattr(existing, "started_at", None) is None:
+                    existing.started_at = now
+                if respondent_email and getattr(existing, "respondent_email", None) is None:
+                    existing.respondent_email = respondent_email
+                if respondent_email is None and getattr(existing, "anonymous_id", None) is None:
+                    existing.anonymous_id = anonymous_id
+                existing.identity_mode = identity_mode.value
+            else:
+                db.add(
+                    SurveyResponse(
+                        survey_id=survey_id,
+                        question_id=qid,
+                        respondent_email=respondent_email,
+                        anonymous_id=None if respondent_email else anonymous_id,
+                        session_id=request.session_token,
+                        identity_mode=identity_mode.value,
+                        response_text=payload.get("response_text"),
+                        response_value=payload.get("response_value"),
+                        started_at=now,
+                        session_status="active",
+                        submitted_at=now,
+                    )
+                )
+
+        total_questions = db.query(SurveyQuestion).filter(SurveyQuestion.survey_id == survey_id).count()
+        answered_questions = (
+            db.query(func.count(func.distinct(SurveyResponse.question_id)))
+            .filter(SurveyResponse.survey_id == survey_id, SurveyResponse.session_id == request.session_token)
+            .scalar()
+        )
+        if total_questions > 0 and int(answered_questions or 0) >= int(total_questions):
+            db.query(SurveyResponse).filter(
+                SurveyResponse.survey_id == survey_id, SurveyResponse.session_id == request.session_token
+            ).update(
+                {"session_status": "completed", "abandoned_at": None},
+                synchronize_session=False,
+            )
+            try:
+                session_row.session_status = "completed"
+                session_row.abandoned_at = None
+            except Exception:
+                pass
+
+        db.commit()
+
         # Handle both single response and batch responses
         if request.question_id:
             # Single response format
@@ -3996,7 +4430,7 @@ async def get_survey_details(survey_id: int, db: Session = Depends(get_db)):
 async def create_survey(request: SurveyCreateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Create a new survey"""
     try:
-        current_user_email = _require_admin_access(http_request, db)
+        current_user_email = _require_survey_builder_access(http_request, db)
         survey = Survey(
             title=request.title,
             description=request.description,
@@ -4019,7 +4453,7 @@ async def create_survey(request: SurveyCreateRequest, http_request: Request, db:
 async def update_survey(survey_id: int, request: SurveyUpdateRequest, http_request: Request, db: Session = Depends(get_db)):
     """Update an existing survey"""
     try:
-        _require_admin_access(http_request, db)
+        _require_survey_builder_access(http_request, db)
         survey = db.query(Survey).filter(Survey.id == survey_id).first()
         if not survey:
             raise HTTPException(status_code=404, detail="Survey not found")
@@ -4077,11 +4511,237 @@ async def get_survey_questions(survey_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error fetching questions: {str(e)}")
 
 
+@app.post("/api/v2/surveys/{survey_id}/questions")
+async def create_survey_question(
+    survey_id: int,
+    request: SurveyQuestionCreateRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create a new question for a survey."""
+    try:
+        _require_survey_builder_access(http_request, db)
+        survey = db.query(Survey).filter(Survey.id == survey_id).first()
+        if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        max_order = (
+            db.query(func.max(SurveyQuestion.order_index))
+            .filter(SurveyQuestion.survey_id == survey_id)
+            .scalar()
+        )
+        next_order = int(max_order or 0) + 1
+
+        question = SurveyQuestion(
+            survey_id=survey_id,
+            question_text=request.question_text,
+            question_type=request.question_type,
+            category=request.category,
+            section=request.section,
+            order_index=request.order_index if request.order_index is not None else next_order,
+            required=True if request.required is None else request.required,
+            identity_modes=request.identity_modes,
+            sensitivity_level=request.sensitivity_level,
+            options=request.options,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        return {
+            "id": question.id,
+            "question_text": question.question_text,
+            "question_type": question.question_type,
+            "category": question.category,
+            "section": question.section,
+            "order_index": question.order_index,
+            "required": question.required,
+            "identity_modes": question.identity_modes,
+            "sensitivity_level": question.sensitivity_level,
+            "options": question.options,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating question: {str(e)}")
+
+
+@app.post("/api/v2/surveys/{survey_id}/questions/bulk")
+async def create_survey_questions_bulk(
+    survey_id: int,
+    request: SurveyQuestionBulkCreateRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create multiple questions for a survey."""
+    try:
+        _require_survey_builder_access(http_request, db)
+        survey = db.query(Survey).filter(Survey.id == survey_id).first()
+        if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        max_order = (
+            db.query(func.max(SurveyQuestion.order_index))
+            .filter(SurveyQuestion.survey_id == survey_id)
+            .scalar()
+        )
+        next_order = int(max_order or 0) + 1
+
+        created_questions = []
+        for question_request in request.questions:
+            order_index = question_request.order_index
+            if order_index is None:
+                order_index = next_order
+                next_order += 1
+
+            question = SurveyQuestion(
+                survey_id=survey_id,
+                question_text=question_request.question_text,
+                question_type=question_request.question_type,
+                category=question_request.category,
+                section=question_request.section,
+                order_index=order_index,
+                required=True if question_request.required is None else question_request.required,
+                identity_modes=question_request.identity_modes,
+                sensitivity_level=question_request.sensitivity_level,
+                options=question_request.options,
+            )
+            db.add(question)
+            created_questions.append(question)
+
+        db.commit()
+        return {
+            "message": "Questions created successfully",
+            "count": len(created_questions),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating questions: {str(e)}")
+
+
+@app.put("/api/v2/surveys/{survey_id}/questions/{question_id}")
+async def update_survey_question(
+    survey_id: int,
+    question_id: int,
+    request: SurveyQuestionUpdateRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    """Update a survey question."""
+    try:
+        _require_survey_builder_access(http_request, db)
+        question = (
+            db.query(SurveyQuestion)
+            .filter(SurveyQuestion.id == question_id, SurveyQuestion.survey_id == survey_id)
+            .first()
+        )
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        if request.question_text is not None:
+            question.question_text = request.question_text
+        if request.question_type is not None:
+            question.question_type = request.question_type
+        if request.category is not None:
+            question.category = request.category
+        if request.section is not None:
+            question.section = request.section
+        if request.order_index is not None:
+            question.order_index = request.order_index
+        if request.required is not None:
+            question.required = request.required
+        if request.identity_modes is not None:
+            question.identity_modes = request.identity_modes
+        if request.sensitivity_level is not None:
+            question.sensitivity_level = request.sensitivity_level
+        if request.options is not None:
+            question.options = request.options
+
+        db.commit()
+        return {"message": "Question updated successfully", "id": question.id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating question: {str(e)}")
+
+
+@app.delete("/api/v2/surveys/{survey_id}/questions/{question_id}")
+async def delete_survey_question(
+    survey_id: int,
+    question_id: int,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    """Delete a survey question."""
+    try:
+        _require_survey_builder_access(http_request, db)
+        question = (
+            db.query(SurveyQuestion)
+            .filter(SurveyQuestion.id == question_id, SurveyQuestion.survey_id == survey_id)
+            .first()
+        )
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        db.delete(question)
+        db.commit()
+        return {"message": "Question deleted successfully", "id": question_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting question: {str(e)}")
+
+
+@app.put("/api/v2/surveys/{survey_id}/questions/reorder")
+async def reorder_survey_questions(
+    survey_id: int,
+    request: SurveyQuestionReorderRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+):
+    """Reorder survey questions by updating order_index in bulk."""
+    try:
+        _require_survey_builder_access(http_request, db)
+        if not request.orders:
+            raise HTTPException(status_code=400, detail="No reorder data provided")
+
+        question_ids = [item.question_id for item in request.orders]
+        questions = (
+            db.query(SurveyQuestion)
+            .filter(SurveyQuestion.survey_id == survey_id, SurveyQuestion.id.in_(question_ids))
+            .all()
+        )
+        if len(questions) != len(question_ids):
+            raise HTTPException(status_code=404, detail="One or more questions not found for this survey")
+
+        question_map = {question.id: question for question in questions}
+        for item in request.orders:
+            question_map[item.question_id].order_index = item.order_index
+
+        db.commit()
+        return {"message": "Questions reordered successfully", "count": len(question_ids)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error reordering questions: {str(e)}")
+
+
 @app.get("/api/v2/surveys/{survey_id}/responses")
 async def get_survey_responses(
     survey_id: int,
     http_request: Request,
     user_email: Optional[EmailStr] = Query(None, description="(Admin only) filter responses for a specific user"),
+    identity_mode: Optional[str] = Query(None, description="Filter by identity mode (anonymous, conditional, identified)"),
+    date_from: Optional[str] = Query(None, description="Filter: submitted_at >= date (YYYY-MM-DD or ISO datetime)"),
+    date_to: Optional[str] = Query(None, description="Filter: submitted_at <= date (YYYY-MM-DD or ISO datetime)"),
+    skip: Optional[int] = Query(None, ge=0, description="Pagination offset"),
+    limit: Optional[int] = Query(None, ge=1, le=1000, description="Pagination limit (max 1000)"),
     db: Session = Depends(get_db),
 ):
     """
@@ -4098,20 +4758,65 @@ async def get_survey_responses(
         if user_email:
             query = query.filter(SurveyResponse.respondent_email == str(user_email))
 
-        responses = query.all()
+        if identity_mode and identity_mode.strip().lower() not in ("all", "*"):
+            query = query.filter(SurveyResponse.identity_mode == identity_mode.strip().lower())
 
-        return [
-            {
-                "id": r.id,
-                "question_id": r.question_id,
-                "respondent_email": r.respondent_email,
-                "identity_mode": r.identity_mode,
-                "response_text": r.response_text,
-                "response_value": r.response_value,
-                "submitted_at": r.submitted_at.isoformat(),
-            }
-            for r in responses
-        ]
+        if date_from:
+            from_dt = _parse_dt_filter(date_from, end_of_day=False)
+            if not from_dt:
+                raise HTTPException(status_code=400, detail="Invalid date_from (expected YYYY-MM-DD or ISO datetime)")
+            query = query.filter(SurveyResponse.submitted_at >= from_dt)
+
+        if date_to:
+            to_dt = _parse_dt_filter(date_to, end_of_day=True)
+            if not to_dt:
+                raise HTTPException(status_code=400, detail="Invalid date_to (expected YYYY-MM-DD or ISO datetime)")
+            query = query.filter(SurveyResponse.submitted_at <= to_dt)
+
+        # Backward compatible response (legacy): when pagination params are omitted, return a raw list.
+        if skip is None and limit is None:
+            responses = query.all()
+            return [
+                {
+                    "id": r.id,
+                    "question_id": r.question_id,
+                    "respondent_email": r.respondent_email,
+                    "identity_mode": r.identity_mode,
+                    "response_text": r.response_text,
+                    "response_value": r.response_value,
+                    "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+                }
+                for r in responses
+            ]
+
+        skip_value = int(skip or 0)
+        limit_value = int(limit or 100)
+        total = query.count()
+        responses = query.order_by(SurveyResponse.submitted_at.desc()).offset(skip_value).limit(limit_value).all()
+
+        return {
+            "survey_id": survey_id,
+            "skip": skip_value,
+            "limit": limit_value,
+            "total": total,
+            "has_more": (skip_value + limit_value) < total,
+            "responses": [
+                {
+                    "id": r.id,
+                    "question_id": r.question_id,
+                    "respondent_email": r.respondent_email,
+                    "identity_mode": r.identity_mode,
+                    "response_text": r.response_text,
+                    "response_value": r.response_value,
+                    "session_id": r.session_id,
+                    "session_status": getattr(r, "session_status", None),
+                    "started_at": r.started_at.isoformat() if getattr(r, "started_at", None) else None,
+                    "abandoned_at": r.abandoned_at.isoformat() if getattr(r, "abandoned_at", None) else None,
+                    "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+                }
+                for r in responses
+            ],
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -4129,6 +4834,58 @@ class SurveyResponseSubmitRequest(BaseModel):
     identity_mode: str
     response_text: Optional[str] = None
     response_value: Optional[Dict[str, Any]] = None
+
+
+class StandardizedSurveyScoreRequest(BaseModel):
+    """Request model for scoring standardized survey responses"""
+
+    survey_name: Optional[str] = None
+    audience: Optional[str] = None
+    term_type: Optional[str] = None
+    responses: Union[Dict[str, Any], List[Dict[str, Any]]]
+
+
+class SurveyQuestionCreateRequest(BaseModel):
+    """Request model for creating a survey question"""
+
+    question_text: str
+    question_type: str
+    category: Optional[str] = None
+    section: Optional[str] = None
+    order_index: Optional[int] = None
+    required: Optional[bool] = True
+    identity_modes: Optional[List[str]] = None
+    sensitivity_level: Optional[str] = None
+    options: Optional[List[Any]] = None
+
+
+class SurveyQuestionBulkCreateRequest(BaseModel):
+    """Request model for creating multiple survey questions"""
+
+    questions: List[SurveyQuestionCreateRequest]
+
+
+class SurveyQuestionUpdateRequest(BaseModel):
+    """Request model for updating a survey question"""
+
+    question_text: Optional[str] = None
+    question_type: Optional[str] = None
+    category: Optional[str] = None
+    section: Optional[str] = None
+    order_index: Optional[int] = None
+    required: Optional[bool] = None
+    identity_modes: Optional[List[str]] = None
+    sensitivity_level: Optional[str] = None
+    options: Optional[List[Any]] = None
+
+
+class SurveyQuestionReorderItem(BaseModel):
+    question_id: int
+    order_index: int
+
+
+class SurveyQuestionReorderRequest(BaseModel):
+    orders: List[SurveyQuestionReorderItem]
 
 
 @app.post("/api/v2/surveys/responses")
@@ -4165,6 +4922,8 @@ async def submit_survey_response_direct(
             identity_mode=identity_mode,
             response_text=request.response_text,
             response_value=request.response_value,
+            session_status="active" if request.session_id else None,
+            started_at=datetime.utcnow() if request.session_id else None,
         )
         db.add(response)
         db.commit()
@@ -4209,6 +4968,427 @@ async def get_survey_analytics(survey_id: int, http_request: Request, db: Sessio
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching analytics: {str(e)}")
+
+
+def _parse_date_range_to_timedelta(date_range: str) -> timedelta:
+    """Parse simple windows like 7d/30d/90d into a timedelta."""
+    raw = (date_range or "").strip().lower()
+    if raw.endswith("d"):
+        try:
+            days = int(raw[:-1])
+            return timedelta(days=max(1, min(days, 3650)))
+        except Exception:
+            return timedelta(days=30)
+    return timedelta(days=30)
+
+
+def _parse_dt_filter(value: str, *, end_of_day: bool = False) -> Optional[datetime]:
+    """Parse either YYYY-MM-DD or ISO datetime into a naive datetime.
+
+    - If a pure date is provided, it becomes start-of-day, or end-of-day when end_of_day=True.
+    - Accepts a trailing 'Z' in ISO strings.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # Normalize common 'Z' suffix.
+    raw = raw.replace("Z", "+00:00")
+
+    # Try datetime first.
+    try:
+        dt = datetime.fromisoformat(raw)
+        # If timezone-aware, drop tzinfo to keep comparisons consistent with naive UTC-ish DB timestamps.
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt
+    except Exception:
+        pass
+
+    # Fallback to date.
+    try:
+        d = date.fromisoformat(raw)
+        if end_of_day:
+            return datetime(d.year, d.month, d.day, 23, 59, 59, 999999)
+        return datetime(d.year, d.month, d.day)
+    except Exception:
+        return None
+
+
+@app.get("/api/v2/surveys/admin/abandonment-analytics")
+async def get_abandonment_analytics(
+    http_request: Request,
+    survey_id: Optional[int] = Query(None, description="Optional survey filter"),
+    date_range: str = Query("30d", description="Window: 7d, 30d, 90d"),
+    include_estimations: bool = Query(False, description="Include historically-estimated abandonment markers"),
+    db: Session = Depends(get_db),
+):
+    """Admin analytics for survey abandonment (completion rates, dropout points, time-to-abandon)."""
+    try:
+        _require_admin_access(http_request, db)
+
+        now = datetime.utcnow()
+        window = _parse_date_range_to_timedelta(date_range)
+        start_dt = now - window
+
+        if survey_id is not None:
+            survey = db.query(Survey).filter(Survey.id == survey_id).first()
+            if not survey:
+                raise HTTPException(status_code=404, detail="Survey not found")
+
+        # Total questions per survey
+        tq_query = db.query(SurveyQuestion.survey_id, func.count(SurveyQuestion.id)).group_by(SurveyQuestion.survey_id)
+        if survey_id is not None:
+            tq_query = tq_query.filter(SurveyQuestion.survey_id == survey_id)
+        total_questions_by_survey = {sid: int(cnt or 0) for sid, cnt in tq_query.all()}
+
+        # Session-level stats derived from survey_responses
+        base = (
+            db.query(
+                SurveyResponse.survey_id.label("survey_id"),
+                SurveyResponse.session_id.label("session_id"),
+                func.min(func.coalesce(SurveyResponse.started_at, SurveyResponse.created_at, SurveyResponse.submitted_at)).label(
+                    "started_at"
+                ),
+                func.max(SurveyResponse.submitted_at).label("last_activity"),
+                func.count(func.distinct(SurveyResponse.question_id)).label("answered_questions"),
+                func.max(SurveyQuestion.order_index).label("max_order_index"),
+                func.max(SurveyResponse.identity_mode).label("identity_mode"),
+            )
+            .join(SurveyQuestion, SurveyQuestion.id == SurveyResponse.question_id)
+            .filter(SurveyResponse.session_id.isnot(None))
+            .filter(SurveyResponse.submitted_at >= start_dt)
+        )
+        if not include_estimations:
+            base = base.filter(
+                (SurveyResponse.abandoned_confidence.is_(None))
+                | (SurveyResponse.abandoned_confidence == "")
+                | (SurveyResponse.abandoned_confidence == "NULL")
+            )
+        if survey_id is not None:
+            base = base.filter(SurveyResponse.survey_id == survey_id)
+        session_rows = base.group_by(SurveyResponse.survey_id, SurveyResponse.session_id).all()
+
+        sessions = []
+        for r in session_rows:
+            tq = total_questions_by_survey.get(r.survey_id, 0)
+            answered = int(r.answered_questions or 0)
+            started_at = r.started_at or None
+            last_activity = r.last_activity or None
+            progress = (answered / tq) if tq > 0 else 0.0
+            completed = tq > 0 and answered >= tq
+            timed_out = bool(last_activity and (now - last_activity) > SURVEY_SESSION_TIMEOUT and not completed)
+            abandonment_at = (last_activity + SURVEY_SESSION_TIMEOUT) if (timed_out and last_activity) else None
+
+            sessions.append(
+                {
+                    "survey_id": r.survey_id,
+                    "session_id": r.session_id,
+                    "identity_mode": (r.identity_mode or "unknown"),
+                    "started_at": started_at,
+                    "last_activity": last_activity,
+                    "answered_questions": answered,
+                    "total_questions": tq,
+                    "progress": progress,
+                    "max_order_index": int(r.max_order_index or 0),
+                    "status": "completed" if completed else ("timeout" if timed_out else "active"),
+                    "abandoned_at": abandonment_at,
+                }
+            )
+
+        started_sessions = len(sessions)
+        completed_sessions = sum(1 for s in sessions if s["status"] == "completed")
+        abandoned_sessions = sum(1 for s in sessions if s["status"] == "timeout")
+        completion_rate = (completed_sessions / started_sessions) if started_sessions else 0.0
+
+        # Identity mode impact
+        by_mode = {}
+        for s in sessions:
+            mode = s["identity_mode"]
+            entry = by_mode.setdefault(
+                mode,
+                {"mode": mode, "total_started": 0, "completed": 0, "abandoned": 0, "completion_rate": 0.0},
+            )
+            entry["total_started"] += 1
+            if s["status"] == "completed":
+                entry["completed"] += 1
+            elif s["status"] == "timeout":
+                entry["abandoned"] += 1
+        for entry in by_mode.values():
+            entry["completion_rate"] = (entry["completed"] / entry["total_started"]) if entry["total_started"] else 0.0
+
+        # Completion funnel (based on progress thresholds)
+        funnel = [
+            {"name": "Started", "count": started_sessions, "percentage": 100.0},
+            {
+                "name": "Mid Survey (>=50%)",
+                "count": sum(1 for s in sessions if s["progress"] >= 0.5),
+            },
+            {
+                "name": "Near End (>=90%)",
+                "count": sum(1 for s in sessions if s["progress"] >= 0.9),
+            },
+            {"name": "Completed", "count": completed_sessions},
+        ]
+        for stage in funnel[1:]:
+            stage["percentage"] = (stage["count"] / started_sessions * 100.0) if started_sessions else 0.0
+        for i in range(1, len(funnel)):
+            funnel[i]["dropout"] = max(0, funnel[i - 1]["count"] - funnel[i]["count"])
+
+        # Question-level dropout heatmap only for a specific survey
+        dropout_heatmap = None
+        if survey_id is not None:
+            questions = (
+                db.query(SurveyQuestion.id, SurveyQuestion.order_index, SurveyQuestion.question_text)
+                .filter(SurveyQuestion.survey_id == survey_id)
+                .order_by(SurveyQuestion.order_index.asc())
+                .all()
+            )
+            order_to_question = {int(o): {"question_id": qid, "question_text": qt} for qid, o, qt in questions}
+
+            dropout_counts = {}
+            for s in sessions:
+                if s["status"] == "completed":
+                    continue
+                next_order = int(s["max_order_index"] or 0) + 1
+                dropout_counts[next_order] = dropout_counts.get(next_order, 0) + 1
+
+            matrix = []
+            tq = total_questions_by_survey.get(survey_id, 0)
+            for order in range(0, tq):
+                meta = order_to_question.get(order, {"question_id": None, "question_text": ""})
+                reached = sum(1 for s in sessions if int(s["max_order_index"] or 0) >= order)
+                dropped = dropout_counts.get(order, 0)
+                dropout_rate = (dropped / reached) if reached else 0.0
+                matrix.append(
+                    {
+                        "question_id": meta.get("question_id"),
+                        "order_index": order,
+                        "question_text": meta.get("question_text"),
+                        "completions": reached,
+                        "dropouts": dropped,
+                        "dropout_rate": dropout_rate,
+                    }
+                )
+            dropout_heatmap = {"type": "heatmap", "title": "Dropout Heatmap: Abandonment by Question", "matrix": matrix}
+
+        # Time-to-abandon samples (minutes)
+        abandon_minutes = []
+        abandon_samples_for_stats = []
+        for s in sessions:
+            if s["status"] != "timeout":
+                continue
+            if s["started_at"] and s["abandoned_at"]:
+                minutes = (s["abandoned_at"] - s["started_at"]).total_seconds() / 60.0
+                abandon_minutes.append(minutes)
+                abandon_samples_for_stats.append(minutes)
+
+        abandon_minutes_sorted = sorted(abandon_minutes)
+        median_abandon = abandon_minutes_sorted[len(abandon_minutes_sorted) // 2] if abandon_minutes_sorted else None
+
+        # Completion status breakdown
+        status_counts = {
+            "completed": completed_sessions,
+            "timeout": abandoned_sessions,
+            "active": sum(1 for s in sessions if s["status"] == "active"),
+        }
+
+        # Department completion rates (identified respondents only; others bucketed as Unknown/Anonymous)
+        department_stats = {}
+        if sessions:
+            session_ids = [s["session_id"] for s in sessions]
+            resp_rows = (
+                db.query(SurveyResponse.session_id, func.max(SurveyResponse.respondent_email))
+                .filter(SurveyResponse.session_id.in_(session_ids))
+                .group_by(SurveyResponse.session_id)
+                .all()
+            )
+            session_to_email = {sid: email for sid, email in resp_rows}
+            emails = [e for e in session_to_email.values() if e]
+            people = {}
+            if emails:
+                people_rows = db.query(Person.email, Person.department).filter(Person.email.in_(emails)).all()
+                people = {email: (dept or "Unknown") for email, dept in people_rows}
+
+            for s in sessions:
+                email = session_to_email.get(s["session_id"]) if session_to_email else None
+                department = people.get(email) if email else "Anonymous"
+                entry = department_stats.setdefault(
+                    department,
+                    {
+                        "department": department,
+                        "total_started": 0,
+                        "completed": 0,
+                        "abandoned": 0,
+                        "active": 0,
+                        "completion_rate": 0.0,
+                    },
+                )
+                entry["total_started"] += 1
+                if s["status"] == "completed":
+                    entry["completed"] += 1
+                elif s["status"] == "timeout":
+                    entry["abandoned"] += 1
+                else:
+                    entry["active"] += 1
+            for entry in department_stats.values():
+                entry["completion_rate"] = (
+                    entry["completed"] / entry["total_started"] if entry["total_started"] else 0.0
+                )
+
+        # Session duration distribution (minutes)
+        durations_minutes = []
+        for s in sessions:
+            if not s.get("started_at"):
+                continue
+            end_time = None
+            if s["status"] == "timeout" and s.get("abandoned_at"):
+                end_time = s["abandoned_at"]
+            elif s.get("last_activity"):
+                end_time = s["last_activity"]
+            else:
+                end_time = now
+            try:
+                durations_minutes.append((end_time - s["started_at"]).total_seconds() / 60.0)
+            except Exception:
+                continue
+
+        def _histogram_bins(samples, edges):
+            bins = []
+            for i in range(len(edges) - 1):
+                bins.append({"range": f"{edges[i]}-{edges[i + 1]} min", "count": 0, "start": edges[i], "end": edges[i + 1]})
+            bins.append({"range": f"{edges[-1]}+ min", "count": 0, "start": edges[-1], "end": None})
+            for v in samples:
+                placed = False
+                for i in range(len(edges) - 1):
+                    if edges[i] <= v < edges[i + 1]:
+                        bins[i]["count"] += 1
+                        placed = True
+                        break
+                if not placed:
+                    if v >= edges[-1]:
+                        bins[-1]["count"] += 1
+            total = sum(b["count"] for b in bins) or 0
+            for b in bins:
+                b["percentage"] = (b["count"] / total) if total else 0.0
+            return bins
+
+        duration_bins = _histogram_bins(durations_minutes, [0, 2, 5, 10, 15, 20]) if durations_minutes else []
+
+        # Abandonment timeline (minutes spent in survey)
+        timeline_points = []
+        if sessions:
+            # Choose a sensible horizon.
+            horizon = 0
+            for s in sessions:
+                if s.get("started_at"):
+                    end_time = s.get("abandoned_at") if s["status"] == "timeout" else s.get("last_activity") or now
+                    try:
+                        horizon = max(horizon, int(((end_time - s["started_at"]).total_seconds() / 60.0) or 0))
+                    except Exception:
+                        continue
+            horizon = min(max(horizon, 20), 60)
+            step = 2
+            for m in range(0, horizon + 1, step):
+                active_count = 0
+                abandoned_count = 0
+                for s in sessions:
+                    if not s.get("started_at"):
+                        continue
+                    end_time = s.get("abandoned_at") if s["status"] == "timeout" else s.get("last_activity") or now
+                    try:
+                        duration = (end_time - s["started_at"]).total_seconds() / 60.0
+                    except Exception:
+                        continue
+                    if duration >= m:
+                        active_count += 1
+                    if s["status"] == "timeout" and s.get("abandoned_at"):
+                        abandon_m = (s["abandoned_at"] - s["started_at"]).total_seconds() / 60.0
+                        if abandon_m <= m:
+                            abandoned_count += 1
+                timeline_points.append({"minutes": m, "active": active_count, "abandoned": abandoned_count})
+
+        # Basic confidence indicator
+        data_confidence = "HIGH" if not include_estimations else "MEDIUM"
+
+        return {
+            "summary": {
+                "survey_id": survey_id,
+                "date_range": date_range,
+                "started_sessions": started_sessions,
+                "completed_sessions": completed_sessions,
+                "abandoned_sessions": abandoned_sessions,
+                "completion_rate": completion_rate,
+                "abandonment_rate": (abandoned_sessions / started_sessions) if started_sessions else 0.0,
+                "median_time_to_abandon_minutes": median_abandon,
+                "timeout_minutes": SURVEY_SESSION_TIMEOUT_MINUTES,
+            },
+            "charts": {
+                "completion_funnel": {
+                    "type": "funnel",
+                    "title": "Survey Completion Funnel",
+                    "stages": funnel,
+                    "completion_rate": completion_rate,
+                    "abandonment_rate": (abandoned_sessions / started_sessions) if started_sessions else 0.0,
+                },
+                "abandonment_timeline": {
+                    "type": "line_area",
+                    "title": "Survey Abandonment Over Time",
+                    "x_axis": "Minutes Spent in Survey",
+                    "y_axis": "Number of Respondents",
+                    "series": [
+                        {"name": "Active Respondents", "data": [{"minutes": p["minutes"], "count": p["active"]} for p in timeline_points], "color": "green"},
+                        {"name": "Abandoned Sessions", "data": [{"minutes": p["minutes"], "count": p["abandoned"]} for p in timeline_points], "color": "red"},
+                    ],
+                    "median_time_to_abandon_minutes": median_abandon,
+                },
+                "dropout_heatmap": dropout_heatmap,
+                "identity_mode_impact": {
+                    "type": "grouped_bar",
+                    "title": "Completion Rate by Identity Mode",
+                    "categories": list(by_mode.values()),
+                },
+                "time_to_abandon": {
+                    "type": "histogram",
+                    "title": "When Respondents Abandon Surveys",
+                    "samples_minutes": abandon_minutes,
+                    "bins": _histogram_bins(abandon_samples_for_stats, [0, 2, 5, 10, 15, 20]) if abandon_samples_for_stats else [],
+                    "statistics": {
+                        "median_minutes": median_abandon,
+                        "min_minutes": min(abandon_samples_for_stats) if abandon_samples_for_stats else None,
+                        "max_minutes": max(abandon_samples_for_stats) if abandon_samples_for_stats else None,
+                        "mean_minutes": (sum(abandon_samples_for_stats) / len(abandon_samples_for_stats)) if abandon_samples_for_stats else None,
+                    },
+                },
+                "response_completion_status": {
+                    "type": "pie",
+                    "title": "Response Completion Status",
+                    "categories": [
+                        {"name": "Completed", "value": status_counts["completed"]},
+                        {"name": "Abandoned (timeout)", "value": status_counts["timeout"]},
+                        {"name": "Active", "value": status_counts["active"]},
+                    ],
+                },
+                "department_completion_rates": {
+                    "type": "bar",
+                    "title": "Completion Rate by Department",
+                    "categories": sorted(list(department_stats.values()), key=lambda x: x["total_started"], reverse=True),
+                },
+                "session_duration_distribution": {
+                    "type": "histogram",
+                    "title": "Session Duration Distribution",
+                    "bins": duration_bins,
+                },
+            },
+            "generated_at": now.isoformat() + "Z",
+            "data_confidence": data_confidence,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating abandonment analytics: {str(e)}")
 
 
 # Notifications Endpoints (In-App)
@@ -4403,6 +5583,48 @@ async def get_comprehensive_survey_template(
         return survey_template
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting survey template: {str(e)}")
+
+
+@app.get("/api/v2/survey-templates/standardized")
+async def get_standardized_survey_template(
+    audience: Optional[str] = Query(None, description="Audience filter: Parent or Staff"),
+    term_type: Optional[str] = Query(None, description="Term type filter: core or rotating"),
+    name: Optional[str] = Query(None, description="Exact survey name"),
+):
+    """Get standardized parent/staff survey templates with rotation calendar."""
+    try:
+        data = get_standardized_surveys(audience=audience, term_type=term_type, name=name)
+        if name and data is None:
+            raise HTTPException(status_code=404, detail="Survey template not found")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting standardized survey templates: {str(e)}")
+
+
+@app.post("/api/v2/survey-templates/standardized/score")
+async def score_standardized_survey(request: StandardizedSurveyScoreRequest):
+    """Score standardized survey responses using template weights."""
+    try:
+        survey = get_standardized_surveys(
+            audience=request.audience,
+            term_type=request.term_type,
+            name=request.survey_name,
+        )
+        if not isinstance(survey, dict) or "sections" not in survey:
+            raise HTTPException(status_code=404, detail="Survey template not found for scoring")
+        results = score_standardized_survey_responses(survey, request.responses)
+        return {
+            "survey_name": survey.get("name"),
+            "audience": survey.get("audience"),
+            "term_type": survey.get("term_type"),
+            "results": results,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error scoring standardized survey responses: {str(e)}")
 
 
 @app.get("/api/v2/survey-templates/section/{category}")
@@ -5516,7 +6738,11 @@ async def get_nomination_window_status(cycle_id: int, request: Request, db: Sess
 
         _require_authenticated_email(request)
         resolved_eom_cycle_id = _resolve_eom_cycle_id(db, cycle_id)
-        eom_cycle = db.query(EOMCycle).filter(EOMCycle.id == resolved_eom_cycle_id).first()
+        eom_cycle = (
+            db.query(EOMCycle)
+            .filter(EOMCycle.id == resolved_eom_cycle_id, EOMCycle.deleted_at.is_(None))
+            .first()
+        )
         if not eom_cycle:
             raise HTTPException(status_code=404, detail="EOM cycle not found")
 

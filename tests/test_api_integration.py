@@ -120,6 +120,20 @@ class TestSurveyAPI:
         # May return 404 if question doesn't exist, which is acceptable
         assert response.status_code in [200, 201, 401, 403, 404]
 
+    def test_get_survey_responses_paginated(self, auth_headers):
+        """Test GET /api/v2/surveys/{id}/responses with pagination params"""
+        # We don't assume survey 1 exists in every environment.
+        response = requests.get(
+            f"{BASE_URL}/surveys/1/responses", headers=auth_headers, params={"skip": 0, "limit": 10}
+        )
+        assert response.status_code in [200, 401, 403, 404]
+        if response.status_code != 200:
+            return
+        data = response.json()
+        assert isinstance(data, dict)
+        assert "responses" in data
+        assert isinstance(data["responses"], list)
+
 
 class TestHybridIdentityAPI:
     """Test Hybrid Identity endpoints"""
@@ -178,8 +192,33 @@ class TestHybridIdentityAPI:
                 },
             }
             response = requests.post(f"{BASE_URL}/hybrid-identity/submit-response", headers=auth_headers, json=response_data)
-            # May return 404 if session/question doesn't exist
-            assert response.status_code in [200, 201, 401, 403, 404]
+            # May return 400 if questions don't exist for the referenced survey
+            assert response.status_code in [200, 201, 400, 401, 403, 404]
+
+
+class TestSurveyAbandonmentAnalyticsAPI:
+    """Smoke test for the admin abandonment analytics endpoint"""
+
+    @pytest.fixture
+    def auth_headers(self):
+        headers = {"Content-Type": "application/json"}
+        token = os.getenv("TEST_AUTH_BEARER_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    def test_abandonment_analytics(self, auth_headers):
+        response = requests.get(
+            f"{BASE_URL}/surveys/admin/abandonment-analytics",
+            headers=auth_headers,
+            params={"survey_id": 1, "date_range": "30d"},
+        )
+        assert response.status_code in [200, 401, 403, 404]
+        if response.status_code != 200:
+            return
+        data = response.json()
+        assert isinstance(data, dict)
+        assert "summary" in data and "charts" in data
 
 
 class TestAdminAPI:

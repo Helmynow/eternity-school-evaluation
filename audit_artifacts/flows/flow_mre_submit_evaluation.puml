@@ -1,0 +1,21 @@
+@startuml
+title Flow: MRE evaluation submission
+skinparam shadowing false
+
+actor User as u
+participant "Frontend\n/mre/evaluate" as fe
+participant "FastAPI\nPOST /api/v2/mre/evaluations/process" as api
+database "Postgres\n(assignments,evaluations,audit_logs)" as db
+
+u -> fe: Select assignment + enter scores
+fe -> api: POST evaluation (assignment_id, rating, domain_scores)
+api -> api: Validate JWT\n_extract user_email
+api -> db: SELECT assignment\nWHERE id = assignment_id
+api -> api: Assert user_email == assignment.rater_email\n(or super admin)
+api -> db: INSERT evaluation\n+ compute weighted_rating
+api -> db: INSERT audit log (async)
+api --> fe: 200 OK (evaluation_id, weighted_rating,…)
+fe --> u: Success toast + refresh assignments
+
+@enduml
+

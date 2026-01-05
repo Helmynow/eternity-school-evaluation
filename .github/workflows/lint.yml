@@ -36,3 +36,6 @@ jobs:
       run: |
         isort --check-only backend/ tests/
 
+    - name: Traceability matrix check
+      run: |
+        python scripts/check_traceability.py --repo-root .

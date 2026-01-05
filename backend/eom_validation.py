@@ -298,7 +298,7 @@ class EOMNominationValidator:
         # Check rotation eligibility flag
         nominee_record = (
             self.db.query(EOMNominee)
-            .filter(EOMNominee.nominee_email == nominee_email)
+            .filter(EOMNominee.nominee_email == nominee_email, EOMNominee.deleted_at.is_(None))
             .order_by(EOMNominee.created_at.desc())
             .first()
         )
@@ -746,7 +746,9 @@ class EOMNominationValidator:
             Dictionary with validation results
         """
         query = self.db.query(EOMNominee).filter(
-            EOMNominee.nominee_email == nominee_email, EOMNominee.eom_cycle_id == eom_cycle_id
+            EOMNominee.nominee_email == nominee_email,
+            EOMNominee.eom_cycle_id == eom_cycle_id,
+            EOMNominee.deleted_at.is_(None),
         )
 
         if category:
@@ -801,7 +803,9 @@ class EOMNominationValidator:
 
         # Leaders can only nominate once per category
         query = self.db.query(EOMNominee).filter(
-            EOMNominee.nominated_by == nominated_by, EOMNominee.eom_cycle_id == eom_cycle_id
+            EOMNominee.nominated_by == nominated_by,
+            EOMNominee.eom_cycle_id == eom_cycle_id,
+            EOMNominee.deleted_at.is_(None),
         )
 
         if category:
@@ -996,7 +1000,11 @@ class EOMNominationValidator:
         Returns:
             Dictionary with summary statistics
         """
-        nominations = self.db.query(EOMNominee).filter(EOMNominee.eom_cycle_id == eom_cycle_id).all()
+        nominations = (
+            self.db.query(EOMNominee)
+            .filter(EOMNominee.eom_cycle_id == eom_cycle_id, EOMNominee.deleted_at.is_(None))
+            .all()
+        )
 
         if not nominations:
             return {
@@ -1202,7 +1210,7 @@ class EOMNominationValidator:
             # No rules configured, check default eligibility
             nominee_record = (
                 self.db.query(EOMNominee)
-                .filter(EOMNominee.nominee_email == nominee_email)
+                .filter(EOMNominee.nominee_email == nominee_email, EOMNominee.deleted_at.is_(None))
                 .order_by(EOMNominee.created_at.desc())
                 .first()
             )
@@ -1398,7 +1406,7 @@ class EOMNominationValidator:
             Dictionary with rotation history
         """
         # Get all nominations
-        query = self.db.query(EOMNominee).filter(EOMNominee.nominee_email == nominee_email)
+        query = self.db.query(EOMNominee).filter(EOMNominee.nominee_email == nominee_email, EOMNominee.deleted_at.is_(None))
 
         if category:
             query = query.filter(EOMNominee.category == category)

@@ -43,6 +43,8 @@ const EOM_CATEGORIES = [
   },
 ]
 
+const NOMINATIONS_PAGE_SIZE = 50
+
 const EOMNomination = ({ mode = 'nominate' }) => {
   const { user, role, isCEO, isPNC, isDepartmentHead } = useAuth()
   const [selectedCategory, setSelectedCategory] = useState(null)
@@ -50,9 +52,20 @@ const EOMNomination = ({ mode = 'nominate' }) => {
   const [reason, setReason] = useState('')
   const [eligibleNominees, setEligibleNominees] = useState([])
   const [currentCycle, setCurrentCycle] = useState(null)
+  const [windowStatus, setWindowStatus] = useState(null)
   const [validationResult, setValidationResult] = useState(null)
   const [suggestedCategory, setSuggestedCategory] = useState(null)
   const [suggestingCategory, setSuggestingCategory] = useState(false)
+
+  const checkNominationWindow = useCallback(async (cycleId) => {
+    try {
+      const response = await apiClient.get(`/api/v2/eom/cycles/${cycleId}/window-status`)
+      setWindowStatus(response.data)
+    } catch (error) {
+      console.error('Failed to check nomination window:', error)
+      setWindowStatus(null)
+    }
+  }, [])
 
   // Get current cycle - use useCallback to stabilize the endpoint function
   const getCurrentCycle = useCallback(() => apiClient.cycles.getCurrent(), [])
@@ -77,6 +90,16 @@ const EOMNomination = ({ mode = 'nominate' }) => {
       setCurrentCycle(null)
     }
   }, [currentCycleData, cycleLoading])
+
+  useEffect(() => {
+    const cycleId = currentCycle?.id
+    if (!cycleId) {
+      setWindowStatus(null)
+      return
+    }
+
+    checkNominationWindow(cycleId)
+  }, [currentCycle?.id, checkNominationWindow])
 
   const loadEligibleNominees = async (cycleId) => {
     try {
@@ -161,13 +184,19 @@ const EOMNomination = ({ mode = 'nominate' }) => {
     }
 
     try {
-      await submitNomination({
+      const result = await submitNomination({
         eom_cycle_id: currentCycle?.id,
         nominee_email: nomineeEmail,
         category: selectedCategory,
         reason: reason,
         nominated_by: 'current_user',
       })
+
+      if (!result?.is_valid) {
+        toast.error(result?.errors?.join(', ') || 'Nomination could not be submitted')
+        return
+      }
+
       toast.success('Nomination submitted successfully!')
       
       // Reset form
@@ -189,6 +218,8 @@ const EOMNomination = ({ mode = 'nominate' }) => {
   const [objectingNomination, setObjectingNomination] = useState(null)
   const [voteSearchQuery, setVoteSearchQuery] = useState('')
   const [voteCategoryFilter, setVoteCategoryFilter] = useState('')
+  const [pagination, setPagination] = useState({ skip: 0, limit: NOMINATIONS_PAGE_SIZE, total: 0, has_more: false })
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
     if (mode === 'vote' && currentCycle) {
@@ -196,11 +227,25 @@ const EOMNomination = ({ mode = 'nominate' }) => {
     }
   }, [mode, currentCycle])
 
-  const loadNominations = async () => {
+  const loadNominations = async ({ append = false } = {}) => {
     if (!currentCycle) return
     try {
-      const response = await apiClient.eom.getNominations(currentCycle.id)
-      setNominations(response.data || [])
+      const nextSkip = append ? pagination.skip + pagination.limit : 0
+      const response = await apiClient.eom.getNominations(currentCycle.id, {
+        skip: nextSkip,
+        limit: NOMINATIONS_PAGE_SIZE,
+      })
+      const payload = response.data || {}
+      const items = payload.nominations || payload.items || payload || []
+      const pageInfo = payload.pagination || {
+        skip: nextSkip,
+        limit: NOMINATIONS_PAGE_SIZE,
+        total: items.length,
+        has_more: false,
+      }
+
+      setNominations((prev) => (append ? [...prev, ...items] : items))
+      setPagination(pageInfo)
     } catch (error) {
       console.error('Failed to load nominations:', error)
     }
@@ -222,6 +267,16 @@ const EOMNomination = ({ mode = 'nominate' }) => {
       toast.error('Failed to submit vote')
     } finally {
       setVotingLoading(false)
+    }
+  }
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !pagination.has_more) return
+    setLoadingMore(true)
+    try {
+      await loadNominations({ append: true })
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -365,7 +420,7 @@ const EOMNomination = ({ mode = 'nominate' }) => {
                 {(voteSearchQuery || voteCategoryFilter) && (
                   <div className="flex items-center justify-between p-3 bg-ese-lang-50 rounded-lg">
                     <p className="text-sm text-ese-ink-navy">
-                      Showing {filteredNominations.length} of {nominations.length} nominations
+                      Showing {filteredNominations.length} of {pagination.total || nominations.length} nominations
                     </p>
                     <button
                       onClick={() => {
@@ -389,56 +444,68 @@ const EOMNomination = ({ mode = 'nominate' }) => {
               </div>
             ) : (
               <div className="space-y-6">
-            {Object.entries(nominationsByCategory).map(([category, categoryNominations]) => (
-              <div key={category} className="ese-card">
-                <h2 className="text-xl font-heading font-semibold text-ese-ink-navy mb-4 capitalize">
-                  {category.replace('_', ' ')} Category
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {categoryNominations.map((nomination) => (
-                    <div
-                      key={nomination.id}
-                      className={`
-                        p-4 rounded-lg border-2 transition-all
-                        ${selectedNomination === nomination.id
-                          ? 'border-ese-accent-mustard bg-ese-accent-mustard/10'
-                          : 'border-ese-accent-beige hover:border-ese-accent-olive'
-                        }
-                      `}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-ese-ink-navy">{nomination.nominee_name || nomination.nominee_email}</h3>
-                          <p className="text-sm text-ese-ink-blue">Nominated by: {nomination.nominated_by}</p>
+                {Object.entries(nominationsByCategory).map(([category, categoryNominations]) => (
+                  <div key={category} className="ese-card">
+                    <h2 className="text-xl font-heading font-semibold text-ese-ink-navy mb-4 capitalize">
+                      {category.replace('_', ' ')} Category
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {categoryNominations.map((nomination) => (
+                        <div
+                          key={nomination.id}
+                          className={`
+                            p-4 rounded-lg border-2 transition-all
+                            ${selectedNomination === nomination.id
+                              ? 'border-ese-accent-mustard bg-ese-accent-mustard/10'
+                              : 'border-ese-accent-beige hover:border-ese-accent-olive'
+                            }
+                          `}
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h3 className="font-semibold text-ese-ink-navy">{nomination.nominee_name || nomination.nominee_email}</h3>
+                              <p className="text-sm text-ese-ink-blue">Nominated by: {nomination.nominated_by}</p>
+                            </div>
+                            <span className="px-2 py-1 rounded-full text-xs bg-ese-int-300 text-ese-int-900">
+                              {nomination.votes_received || 0} votes
+                            </span>
+                          </div>
+                          
+                          <p className="text-sm text-ese-ink-navy mb-4">{nomination.nomination_reason}</p>
+                          
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleVote(nomination.id)}
+                              disabled={votingLoading}
+                              className="flex-1 ese-button-primary disabled:opacity-50"
+                            >
+                              {votingLoading ? 'Submitting...' : 'Vote'}
+                            </button>
+                            <button
+                              onClick={() => handleObject(nomination)}
+                              className="px-4 py-2 bg-ese-accent-terracotta text-white rounded-lg hover:opacity-90 text-sm flex items-center justify-center"
+                              title="Object to this nomination"
+                            >
+                              <img src="/assets/icons/alert.svg" alt="Object" className="w-5 h-5" />
+                            </button>
+                          </div>
                         </div>
-                        <span className="px-2 py-1 rounded-full text-xs bg-ese-int-300 text-ese-int-900">
-                          {nomination.votes_received || 0} votes
-                        </span>
-                      </div>
-                      
-                      <p className="text-sm text-ese-ink-navy mb-4">{nomination.nomination_reason}</p>
-                      
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleVote(nomination.id)}
-                          disabled={votingLoading}
-                          className="flex-1 ese-button-primary disabled:opacity-50"
-                        >
-                          {votingLoading ? 'Submitting...' : 'Vote'}
-                        </button>
-                        <button
-                          onClick={() => handleObject(nomination)}
-                          className="px-4 py-2 bg-ese-accent-terracotta text-white rounded-lg hover:opacity-90 text-sm flex items-center justify-center"
-                          title="Object to this nomination"
-                        >
-                          <img src="/assets/icons/alert.svg" alt="Object" className="w-5 h-5" />
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                  </div>
+                ))}
+
+                {pagination.has_more && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="px-6 py-2 rounded-lg bg-ese-ink-offwhite text-ese-ink-navy hover:bg-ese-accent-beige disabled:opacity-50"
+                    >
+                      {loadingMore ? 'Loading...' : 'Load more nominations'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -507,24 +574,6 @@ const EOMNomination = ({ mode = 'nominate' }) => {
         <p className="text-ese-ink-blue">You do not have permission to nominate. Only Department Heads, P&C, and CEO can nominate.</p>
       </div>
     )
-  }
-
-  // Nomination window status
-  const [windowStatus, setWindowStatus] = useState(null)
-  
-  useEffect(() => {
-    if (currentCycle) {
-      checkNominationWindow()
-    }
-  }, [currentCycle])
-
-  const checkNominationWindow = async () => {
-    try {
-      const response = await apiClient.get(`/api/v2/eom/cycles/${currentCycle.id}/window-status`)
-      setWindowStatus(response.data)
-    } catch (error) {
-      console.error('Failed to check nomination window:', error)
-    }
   }
 
   return (

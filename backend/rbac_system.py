@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, relationship
 
 from backend.audit_logger import AuditLogger
 from backend.database import ActionType as DBActionType
-from backend.database import AuditLog, Base, Person
+from backend.database import AuditLog, Base, Person, pg_enum
 
 
 class PermissionType(enum.Enum):
@@ -57,7 +57,7 @@ class UserPermission(Base):
 
     id = Column(Integer, primary_key=True)
     user_email = Column(String(255), ForeignKey("people.email"), nullable=False)
-    permission_type = Column(Enum(PermissionType), nullable=False)
+    permission_type = Column(pg_enum(PermissionType, name="permission_type"), nullable=False)
     granted_by = Column(String(255), ForeignKey("people.email"), nullable=False)
     granted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=True)  # None = unlimited
@@ -100,6 +100,7 @@ class RBACSystem:
             PermissionType.GRANT_PERMISSIONS,
             PermissionType.REVOKE_PERMISSIONS,
             PermissionType.MANAGE_ROLES,
+            PermissionType.CREATE_SURVEY,
         ],
         "pnc": [
             PermissionType.MANAGE_STAFF,
@@ -107,6 +108,7 @@ class RBACSystem:
             PermissionType.VIEW_REPORTS,
             PermissionType.NOMINATE_EOM,
             PermissionType.VOTE_EOM,
+            PermissionType.CREATE_SURVEY,
         ],
         "department_head": [
             PermissionType.CREATE_EVALUATION,
@@ -114,10 +116,12 @@ class RBACSystem:
             PermissionType.EDIT_EVALUATION,
             PermissionType.NOMINATE_EOM,
             PermissionType.VOTE_EOM,
+            PermissionType.CREATE_SURVEY,
         ],
         "staff": [
             PermissionType.VIEW_EVALUATION,
             PermissionType.RESPOND_SURVEY,
+            PermissionType.CREATE_SURVEY,
         ],
     }
 
@@ -162,16 +166,37 @@ class RBACSystem:
             # Check role_title or infer from metadata
             role = getattr(person, "role_title", None)
             if role:
-                # Normalize role names
-                role_lower = role.lower()
-                if "ceo" in role_lower or "director" in role_lower:
+                role_lower = str(role).strip().lower()
+
+                # CEO should be explicit — do NOT infer CEO from broad titles like "director".
+                if "ceo" in role_lower or "chief executive" in role_lower:
                     return "ceo"
-                elif "pnc" in role_lower or "people" in role_lower or "culture" in role_lower:
+
+                # People & Culture / HR
+                if (
+                    "pnc" in role_lower
+                    or "p&c" in role_lower
+                    or ("people" in role_lower and "culture" in role_lower)
+                    or "human resources" in role_lower
+                    or role_lower.startswith("hr ")
+                    or " hr " in f" {role_lower} "
+                    or role_lower.endswith(" hr")
+                    or role_lower.startswith("hr-")
+                    or "hr director" in role_lower
+                ):
                     return "pnc"
-                elif "head" in role_lower or "principal" in role_lower or "coordinator" in role_lower:
+
+                # Department leadership
+                if (
+                    "department head" in role_lower
+                    or "head of" in role_lower
+                    or "principal" in role_lower
+                    or "vice principal" in role_lower
+                    or "coordinator" in role_lower
+                ):
                     return "department_head"
-                else:
-                    return "staff"
+
+                return "staff"
         return "staff"  # Default
 
     def has_permission(self, user_email: str, permission: PermissionType, context: Optional[Dict] = None) -> bool:

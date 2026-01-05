@@ -88,6 +88,16 @@ The Eternity School Evaluation System is a **comprehensive, production-ready pla
 
 ---
 
+## Interface Architecture Mapping (Traceability)
+
+This system keeps a lightweight UI↔API↔DB↔permissions mapping so every route/control/action is traceable and CI-enforced.
+
+- Docs: `docs/INTERFACE_ARCHITECTURE_MAPPING.md`
+- Artifacts: `audit_artifacts/` (including `ui_mapping_matrix.csv`, `ui-map.puml`, and `db_rls_report.md`)
+
+
+---
+
 ## 2. Feature Completeness Evaluation
 
 ### 2.1 Core Features ⭐⭐⭐⭐⭐ (5/5)

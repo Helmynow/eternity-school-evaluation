@@ -1,0 +1,638 @@
+{
+  "surveys": [
+    {
+      "name": "Parent Satisfaction Survey - Core Benchmark",
+      "audience": "Parent",
+      "term_type": "core",
+      "sections": [
+        {
+          "name": "Overall Experience",
+          "questions": [
+            {
+              "section": "Overall Experience",
+              "text": "Overall, I am satisfied with my child's experience at the school.",
+              "type": "likert",
+              "domain": "satisfaction",
+              "weight": 0.2,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Leadership & Trust",
+          "questions": [
+            {
+              "section": "Leadership & Trust",
+              "text": "I trust the school's leadership and management.",
+              "type": "likert",
+              "domain": "trust",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Leadership & Trust",
+              "text": "The school acts in the best interest of students.",
+              "type": "likert",
+              "domain": "trust",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Communication",
+          "questions": [
+            {
+              "section": "Communication",
+              "text": "The school communicates important information clearly.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Communication",
+              "text": "I know whom to contact when I have a concern.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Core Function",
+          "questions": [
+            {
+              "section": "Core Function",
+              "text": "Academic expectations are clear and appropriate.",
+              "type": "likert",
+              "domain": "teaching",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "Academics"
+            },
+            {
+              "section": "Core Function",
+              "text": "My child is developing academically.",
+              "type": "likert",
+              "domain": "teaching",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "Academics"
+            }
+          ]
+        },
+        {
+          "name": "Environment & Resources",
+          "questions": [
+            {
+              "section": "Environment & Resources",
+              "text": "My child feels safe and supported at school.",
+              "type": "likert",
+              "domain": "wellbeing",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Environment & Resources",
+              "text": "My child is developing socially and emotionally.",
+              "type": "likert",
+              "domain": "wellbeing",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Improvement & Outcomes",
+          "questions": [
+            {
+              "section": "Improvement & Outcomes",
+              "text": "I would recommend this school to other parents.",
+              "type": "likert",
+              "domain": "outcome",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        }
+      ],
+      "scoring": {
+        "method": "weighted_average",
+        "scale": [1, 5],
+        "interpretation": "Higher scores indicate higher satisfaction and trust."
+      }
+    },
+    {
+      "name": "Parent Feedback Survey - Focus Areas",
+      "audience": "Parent",
+      "term_type": "rotating",
+      "sections": [
+        {
+          "name": "Overall Experience",
+          "questions": [
+            {
+              "section": "Overall Experience",
+              "text": "My child's overall experience has been positive this term.",
+              "type": "likert",
+              "domain": "satisfaction",
+              "weight": 0.2,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Leadership & Trust",
+          "questions": [
+            {
+              "section": "Leadership & Trust",
+              "text": "School decisions are well-considered and appropriate.",
+              "type": "likert",
+              "domain": "trust",
+              "weight": 0.2,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Communication",
+          "questions": [
+            {
+              "section": "Communication",
+              "text": "Communication from the school is timely.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Communication",
+              "text": "Communication channels (email, app, meetings) are effective.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Core Function",
+          "questions": [
+            {
+              "section": "Core Function",
+              "text": "Teaching methods support my child's learning needs.",
+              "type": "likert",
+              "domain": "teaching",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Academics"
+            },
+            {
+              "section": "Core Function",
+              "text": "Teachers provide useful feedback on progress.",
+              "type": "likert",
+              "domain": "teaching",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Academics"
+            }
+          ]
+        },
+        {
+          "name": "Environment & Resources",
+          "questions": [
+            {
+              "section": "Environment & Resources",
+              "text": "School facilities support learning.",
+              "type": "likert",
+              "domain": "resources",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Environment & Resources",
+              "text": "Administrative processes are efficient.",
+              "type": "likert",
+              "domain": "resources",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Improvement & Outcomes",
+          "questions": [
+            {
+              "section": "Improvement & Outcomes",
+              "text": "Compared to last term, my child's school experience has:",
+              "type": "categorical",
+              "options": [
+                "Much worse",
+                "Worse",
+                "No change",
+                "Improved",
+                "Significantly improved"
+              ],
+              "domain": "change",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": true,
+              "owner": "General"
+            },
+            {
+              "section": "Improvement & Outcomes",
+              "text": "What is one area the school should improve next term?",
+              "type": "open",
+              "domain": "open_feedback",
+              "weight": 0.0,
+              "benchmark": false,
+              "change_linked": true,
+              "owner": "General"
+            }
+          ]
+        }
+      ],
+      "scoring": {
+        "method": "weighted_average",
+        "scale": [1, 5],
+        "interpretation": "Higher scores indicate improvement and satisfaction; open responses provide qualitative insights."
+      }
+    },
+    {
+      "name": "Staff Satisfaction Survey - Core Benchmark",
+      "audience": "Staff",
+      "term_type": "core",
+      "sections": [
+        {
+          "name": "Overall Experience",
+          "questions": [
+            {
+              "section": "Overall Experience",
+              "text": "Overall, I am satisfied working at this school.",
+              "type": "likert",
+              "domain": "satisfaction",
+              "weight": 0.2,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Leadership & Trust",
+          "questions": [
+            {
+              "section": "Leadership & Trust",
+              "text": "I trust the school's leadership.",
+              "type": "likert",
+              "domain": "trust",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "Management"
+            },
+            {
+              "section": "Leadership & Trust",
+              "text": "Leadership decisions are fair and consistent.",
+              "type": "likert",
+              "domain": "trust",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "Management"
+            }
+          ]
+        },
+        {
+          "name": "Communication",
+          "questions": [
+            {
+              "section": "Communication",
+              "text": "Communication from leadership is clear.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Communication",
+              "text": "I receive information I need in a timely manner.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Core Function",
+          "questions": [
+            {
+              "section": "Core Function",
+              "text": "I clearly understand my role and responsibilities.",
+              "type": "likert",
+              "domain": "role",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            },
+            {
+              "section": "Core Function",
+              "text": "Expectations and performance standards are clear.",
+              "type": "likert",
+              "domain": "role",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        },
+        {
+          "name": "Environment & Resources",
+          "questions": [
+            {
+              "section": "Environment & Resources",
+              "text": "I have the resources needed to do my job well.",
+              "type": "likert",
+              "domain": "resources",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "HR"
+            },
+            {
+              "section": "Environment & Resources",
+              "text": "Collaboration among staff is encouraged.",
+              "type": "likert",
+              "domain": "culture",
+              "weight": 0.075,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "HR"
+            }
+          ]
+        },
+        {
+          "name": "Improvement & Outcomes",
+          "questions": [
+            {
+              "section": "Improvement & Outcomes",
+              "text": "I see myself continuing to work at this school.",
+              "type": "likert",
+              "domain": "retention",
+              "weight": 0.1,
+              "benchmark": true,
+              "change_linked": false,
+              "owner": "General"
+            }
+          ]
+        }
+      ],
+      "scoring": {
+        "method": "weighted_average",
+        "scale": [1, 5],
+        "interpretation": "Higher scores indicate higher engagement, trust, and retention intentions."
+      }
+    },
+    {
+      "name": "Staff Feedback Survey - Focus Areas",
+      "audience": "Staff",
+      "term_type": "rotating",
+      "sections": [
+        {
+          "name": "Overall Experience",
+          "questions": [
+            {
+              "section": "Overall Experience",
+              "text": "My work experience improved this term.",
+              "type": "likert",
+              "domain": "satisfaction",
+              "weight": 0.2,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "HR"
+            }
+          ]
+        },
+        {
+          "name": "Leadership & Trust",
+          "questions": [
+            {
+              "section": "Leadership & Trust",
+              "text": "Leadership listens to staff feedback.",
+              "type": "likert",
+              "domain": "feedback",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Management"
+            },
+            {
+              "section": "Leadership & Trust",
+              "text": "Decision-making processes are transparent.",
+              "type": "likert",
+              "domain": "transparency",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Management"
+            }
+          ]
+        },
+        {
+          "name": "Communication",
+          "questions": [
+            {
+              "section": "Communication",
+              "text": "Changes are communicated clearly.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "HR"
+            },
+            {
+              "section": "Communication",
+              "text": "Expectations around changes are clear.",
+              "type": "likert",
+              "domain": "communication",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "HR"
+            }
+          ]
+        },
+        {
+          "name": "Core Function",
+          "questions": [
+            {
+              "section": "Core Function",
+              "text": "Internal processes allow me to work efficiently.",
+              "type": "likert",
+              "domain": "processes",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Operations"
+            },
+            {
+              "section": "Core Function",
+              "text": "Recent changes improved my effectiveness.",
+              "type": "likert",
+              "domain": "processes",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "Operations"
+            }
+          ]
+        },
+        {
+          "name": "Environment & Resources",
+          "questions": [
+            {
+              "section": "Environment & Resources",
+              "text": "Feedback is constructive and fair.",
+              "type": "likert",
+              "domain": "culture",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "HR"
+            },
+            {
+              "section": "Environment & Resources",
+              "text": "There is a culture of accountability.",
+              "type": "likert",
+              "domain": "culture",
+              "weight": 0.075,
+              "benchmark": false,
+              "change_linked": false,
+              "owner": "HR"
+            }
+          ]
+        },
+        {
+          "name": "Improvement & Outcomes",
+          "questions": [
+            {
+              "section": "Improvement & Outcomes",
+              "text": "Compared to last term, my ability to perform my role has:",
+              "type": "categorical",
+              "options": [
+                "Much worse",
+                "Worse",
+                "No change",
+                "Improved",
+                "Significantly improved"
+              ],
+              "domain": "change",
+              "weight": 0.1,
+              "benchmark": false,
+              "change_linked": true,
+              "owner": "HR"
+            }
+          ]
+        }
+      ],
+      "scoring": {
+        "method": "weighted_average",
+        "scale": [1, 5],
+        "interpretation": "Higher scores indicate better processes, communication, and culture; improvement questions capture change impact."
+      }
+    }
+  ],
+  "rotation_calendar": {
+    "terms": [
+      {
+        "term": "Term 1",
+        "parent_focus_modules": [
+          "Communication",
+          "Core Function"
+        ],
+        "staff_focus_modules": [
+          "Communication",
+          "Core Function"
+        ],
+        "rationale": "Initial term focuses on communication effectiveness and teaching/work processes to set baseline."
+      },
+      {
+        "term": "Term 2",
+        "parent_focus_modules": [
+          "Environment & Resources",
+          "Leadership & Trust"
+        ],
+        "staff_focus_modules": [
+          "Environment & Resources",
+          "Leadership & Trust"
+        ],
+        "rationale": "Second term assesses facilities, resource adequacy, and trust in leadership to inform mid-year improvements."
+      },
+      {
+        "term": "Term 3",
+        "parent_focus_modules": [
+          "Engagement & Wellbeing",
+          "Digital Systems"
+        ],
+        "staff_focus_modules": [
+          "Professional Development",
+          "Culture & Ethics"
+        ],
+        "rationale": "Third term explores deeper engagement, wellbeing, and digital adoption for parents, and professional culture for staff."
+      },
+      {
+        "term": "Term 4",
+        "parent_focus_modules": [
+          "Activities & Events",
+          "Improvement & Change"
+        ],
+        "staff_focus_modules": [
+          "Recognition & Workload",
+          "Improvement & Change"
+        ],
+        "rationale": "Final term evaluates extracurricular events, recognizes efforts, and measures impact of initiatives."
+      }
+    ]
+  }
+}

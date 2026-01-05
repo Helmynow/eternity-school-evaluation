@@ -45,13 +45,14 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     event,
     text,
 )
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.orm import Session, relationship, sessionmaker, with_loader_criteria
 from sqlalchemy.pool import NullPool, QueuePool
 
 # Load environment variables
@@ -61,6 +62,41 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
+
+
+class SoftDeleteMixin:
+    """Shared soft-delete fields and helpers for core tables."""
+
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by = Column(String(255), ForeignKey("people.email", ondelete="SET NULL"), nullable=True)
+
+    def soft_delete(self, deleted_by_email: Optional[str] = None) -> None:
+        self.deleted_at = datetime.utcnow()
+        if deleted_by_email:
+            self.deleted_by = deleted_by_email
+
+    def restore(self) -> None:
+        self.deleted_at = None
+        self.deleted_by = None
+
+    @classmethod
+    def active_filter(cls):
+        return cls.deleted_at.is_(None)
+
+# =============================================================================
+# Enum helpers (Supabase-compatible)
+# =============================================================================
+
+
+def pg_enum(enum_cls: type[enum.Enum], *, name: str) -> Enum:
+    """
+    Create a SQLAlchemy Enum that persists **enum values** (not enum names).
+
+    Supabase migrations define enum values like 'national'/'create' etc, so persisting names
+    like 'NATIONAL'/'CREATE' will break at runtime.
+    """
+
+    return Enum(enum_cls, name=name, values_callable=lambda obj: [e.value for e in obj], native_enum=True)
 
 
 # =============================================================================
@@ -220,7 +256,16 @@ class ActionType(enum.Enum):
     EXPORT = "export"
 
 
-class Cycle(Base):
+class RotationPeriodType(enum.Enum):
+    """Rotation period types (matches Supabase enum rotation_period_type)."""
+
+    YEAR = "year"
+    QUARTER = "quarter"
+    MONTH = "month"
+    TERM = "term"
+
+
+class Cycle(SoftDeleteMixin, Base):
     """Evaluation cycle (e.g., Q1-2024, Annual-2024)"""
 
     __tablename__ = "cycles"
@@ -239,7 +284,7 @@ class Cycle(Base):
     weight_matrices = relationship("WeightMatrix", back_populates="cycle")
 
 
-class Person(Base):
+class Person(SoftDeleteMixin, Base):
     """People in the system (staff, teachers, etc.) with segment support"""
 
     __tablename__ = "people"
@@ -248,7 +293,7 @@ class Person(Base):
     full_name = Column(String(200), nullable=False)
     role_title = Column(String(100))
     department = Column(String(100))
-    segment = Column(Enum(StaffSegment), nullable=False, default=StaffSegment.WHOLE_SCHOOL)
+    segment = Column(pg_enum(StaffSegment, name="staff_segment"), nullable=False, default=StaffSegment.WHOLE_SCHOOL)
     hire_date = Column(Date)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -276,21 +321,21 @@ class Person(Base):
     )
 
 
-class Assignment(Base):
+class Assignment(SoftDeleteMixin, Base):
     """MRE assignments: who evaluates whom with weight matrix support"""
 
     __tablename__ = "assignments"
 
     id = Column(Integer, primary_key=True)
-    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=False)
-    rater_email = Column(String(255), ForeignKey("people.email"), nullable=False)
+    cycle_id = Column(Integer, ForeignKey("cycles.id", ondelete="RESTRICT"), nullable=False)
+    rater_email = Column(String(255), ForeignKey("people.email", ondelete="CASCADE"), nullable=False)
     rater_role = Column(String(100))
-    target_email = Column(String(255), ForeignKey("people.email"), nullable=False)
+    target_email = Column(String(255), ForeignKey("people.email", ondelete="CASCADE"), nullable=False)
     target_role = Column(String(100))
     target_group = Column(String(50))  # e.g., 'peers', 'direct_reports', 'self'
     rater_context = Column(String(100))  # e.g., 'peer_review', 'manager_review'
     weight = Column(Float, default=1.0)
-    weight_matrix_id = Column(Integer, ForeignKey("weight_matrices.id"), nullable=True)
+    weight_matrix_id = Column(Integer, ForeignKey("weight_matrices.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -309,13 +354,13 @@ class Assignment(Base):
     )
 
 
-class EOMCycle(Base):
+class EOMCycle(SoftDeleteMixin, Base):
     """Employee of the Month cycle"""
 
     __tablename__ = "eom_cycles"
 
     id = Column(Integer, primary_key=True)
-    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=False)
+    cycle_id = Column(Integer, ForeignKey("cycles.id", ondelete="RESTRICT"), nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
     status = Column(String(20), default="draft")
@@ -336,26 +381,34 @@ class EOMVoter(Base):
     __tablename__ = "eom_voters"
 
     id = Column(Integer, primary_key=True)
-    eom_cycle_id = Column(Integer, ForeignKey("eom_cycles.id"), nullable=False)
-    voter_email = Column(String(255), ForeignKey("people.email"), nullable=False)
+    eom_cycle_id = Column(Integer, ForeignKey("eom_cycles.id", ondelete="CASCADE"), nullable=False)
+    voter_email = Column(String(255), ForeignKey("people.email", ondelete="CASCADE"), nullable=False)
+    nominee_email = Column(String(255), ForeignKey("people.email", ondelete="CASCADE"), nullable=True)
 
     eom_cycle = relationship("EOMCycle", back_populates="voters")
+    nominee_person = relationship("Person", foreign_keys=[nominee_email])
+
+    __table_args__ = (
+        UniqueConstraint("eom_cycle_id", "voter_email", name="unique_eom_vote_per_cycle"),
+        Index("idx_eom_voter_cycle", "eom_cycle_id"),
+        Index("idx_eom_voter_email", "voter_email"),
+    )
 
 
-class EOMNominee(Base):
+class EOMNominee(SoftDeleteMixin, Base):
     """EOM nominees with categories and rotation tracking"""
 
     __tablename__ = "eom_nominees"
 
     id = Column(Integer, primary_key=True)
-    eom_cycle_id = Column(Integer, ForeignKey("eom_cycles.id"), nullable=False)
-    nominee_email = Column(String(255), ForeignKey("people.email"), nullable=False)
-    nominated_by = Column(String(255), ForeignKey("people.email"))
+    eom_cycle_id = Column(Integer, ForeignKey("eom_cycles.id", ondelete="CASCADE"), nullable=False)
+    nominee_email = Column(String(255), ForeignKey("people.email", ondelete="CASCADE"), nullable=False)
+    nominated_by = Column(String(255), ForeignKey("people.email", ondelete="SET NULL"))
     nomination_reason = Column(Text)
-    category = Column(Enum(EOMCategory), nullable=False)
+    category = Column(pg_enum(EOMCategory, name="eom_category"), nullable=False)
     rotation_eligible = Column(Boolean, default=True)  # Can be nominated again
-    last_nominated_cycle_id = Column(Integer, ForeignKey("eom_cycles.id"), nullable=True)
-    last_won_cycle_id = Column(Integer, ForeignKey("eom_cycles.id"), nullable=True)
+    last_nominated_cycle_id = Column(Integer, ForeignKey("eom_cycles.id", ondelete="SET NULL"), nullable=True)
+    last_won_cycle_id = Column(Integer, ForeignKey("eom_cycles.id", ondelete="SET NULL"), nullable=True)
     nomination_count = Column(Integer, default=0)  # Total nominations across all cycles
     win_count = Column(Integer, default=0)  # Total wins across all cycles
     votes_received = Column(Integer, default=0)
@@ -384,7 +437,9 @@ class EOMWinner(Base):
     id = Column(Integer, primary_key=True)
     eom_cycle_id = Column(Integer, ForeignKey("eom_cycles.id"), nullable=False)
     winner_email = Column(String(255), ForeignKey("people.email"), nullable=False)
-    category = Column(String(50))
+    # In Supabase migrations this column is migrated to `eom_category` (enum).
+    # Keep it nullable for backward compatibility with early schema versions.
+    category = Column(pg_enum(EOMCategory, name="eom_category"), nullable=True)
     term = Column(String(50))  # e.g., '2024-Q1', '2024-Q2', '2024-Annual'
     votes_received = Column(Integer)
     announced_at = Column(Date, default=datetime.utcnow)
@@ -398,7 +453,7 @@ class WeightMatrix(Base):
     __tablename__ = "weight_matrices"
 
     id = Column(Integer, primary_key=True)
-    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=False)
+    cycle_id = Column(Integer, ForeignKey("cycles.id", ondelete="RESTRICT"), nullable=False)
     name = Column(String(200))
     description = Column(Text)
     matrix_config = Column(JSON, nullable=False)  # Store weight matrix as JSON
@@ -423,11 +478,11 @@ class EOMRotationRule(Base):
     __tablename__ = "eom_rotation_rules"
 
     id = Column(Integer, primary_key=True)
-    category = Column(Enum(EOMCategory), nullable=False)
+    category = Column(pg_enum(EOMCategory, name="eom_category"), nullable=False)
     cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=False)
     cooldown_period = Column(Integer, default=3)  # Cycles before eligible again
     max_wins_per_period = Column(Integer, default=1)  # Max wins in a period
-    period_type = Column(String(20), default="year")  # 'year', 'quarter', 'month'
+    period_type = Column(pg_enum(RotationPeriodType, name="rotation_period_type"), default=RotationPeriodType.QUARTER)
     # Matches Supabase schema/migrations
     max_nominations_per_year = Column(Integer, default=2)  # Max nominations per year
     is_active = Column(Boolean, default=True)
@@ -449,7 +504,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True)
-    action_type = Column(Enum(ActionType), nullable=False)
+    action_type = Column(pg_enum(ActionType, name="action_type"), nullable=False)
     entity_type = Column(String(50), nullable=False)  # 'person', 'assignment', 'evaluation', 'eom_nominee', etc.
     entity_id = Column(Integer, nullable=True)  # ID of the affected entity
     user_email = Column(String(255), ForeignKey("people.email"), nullable=False)
@@ -491,13 +546,13 @@ class Attendance(Base):
     )
 
 
-class Evaluation(Base):
+class Evaluation(SoftDeleteMixin, Base):
     """Actual evaluation submissions with weight matrix support"""
 
     __tablename__ = "evaluations"
 
     id = Column(Integer, primary_key=True)
-    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
+    assignment_id = Column(Integer, ForeignKey("assignments.id", ondelete="CASCADE"), nullable=False)
     submitted_at = Column(DateTime, default=datetime.utcnow)
     rating = Column(Float)  # 1-5 scale or similar
     weighted_rating = Column(Float)  # Rating adjusted by weight matrix
@@ -698,6 +753,11 @@ class SurveyResponse(Base):
     identity_mode = Column(String(20))  # 'anonymous', 'conditional', 'partial', 'identified'
     response_text = Column(Text)
     response_value = Column(JSON)  # For structured responses
+    # Session lifecycle tracking (used for abandonment analytics)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    abandoned_at = Column(DateTime)
+    session_status = Column(String(20))  # active, completed, abandoned, timeout
+    abandoned_confidence = Column(String(10))  # HIGH/MEDIUM/LOW/NULL for estimated historical values
     submitted_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -897,6 +957,8 @@ class HybridIdentitySession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_activity = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime)
+    session_status = Column(String(20), default="active")  # active, completed, abandoned, timeout
+    abandoned_at = Column(DateTime)
 
     user = relationship("Person", foreign_keys=[user_email])
     survey = relationship("Survey", foreign_keys=[survey_id])
@@ -1016,6 +1078,21 @@ class Database:
             autoflush=False,
             expire_on_commit=False,  # Avoid lazy loading issues after commit
         )
+
+        # Apply soft-delete filtering globally for SELECTs unless explicitly disabled.
+        @event.listens_for(Database._SessionLocal, "do_orm_execute")
+        def _add_soft_delete_criteria(execute_state):
+            if (
+                execute_state.is_select
+                and not execute_state.execution_options.get("include_deleted", False)
+            ):
+                execute_state.statement = execute_state.statement.options(
+                    with_loader_criteria(
+                        SoftDeleteMixin,
+                        lambda cls: cls.deleted_at.is_(None),
+                        include_aliases=True,
+                    )
+                )
         self.engine = Database._engine
         self.SessionLocal = Database._SessionLocal
 
