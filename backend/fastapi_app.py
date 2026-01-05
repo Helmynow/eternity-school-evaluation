@@ -3,6 +3,8 @@ FastAPI application for Eternity School Evaluation System.
 Provides high-performance API endpoints for evaluation processing.
 """
 
+from __future__ import annotations
+
 import csv
 import hashlib
 import io
