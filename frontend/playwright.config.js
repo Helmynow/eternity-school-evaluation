@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+process.env.VITE_E2E_MOCK_AUTH = 'true'
+
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
@@ -48,5 +50,8 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    env: {
+      VITE_E2E_MOCK_AUTH: 'true',
+    },
   },
 })

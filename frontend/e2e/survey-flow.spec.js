@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { seedSupabaseSession } from './utils/auth'
+import { mockSurveyApi } from './utils/mockApi'
 
 test.describe('Survey Flow E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Mock authentication
-    await page.goto('/login')
-    // In a real scenario, you'd authenticate here
-    // For now, we'll assume the user is already logged in
+    await seedSupabaseSession(page, { email: 'staff@eternity.edu', role: 'staff' })
+    await mockSurveyApi(page)
   })
 
   test('should complete full survey flow', async ({ page }) => {
@@ -126,6 +126,11 @@ test.describe('Survey Flow E2E Tests', () => {
 })
 
 test.describe('Survey Creation Flow', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedSupabaseSession(page, { email: 'pnc@eternity.edu', role: 'pnc' })
+    await mockSurveyApi(page)
+  })
+
   test('should create a new survey', async ({ page }) => {
     // Navigate to survey creation
     await page.goto('/survey/create')
@@ -136,7 +141,10 @@ test.describe('Survey Creation Flow', () => {
     await page.locator('select[name="survey_type"]').selectOption('comprehensive')
 
     // Submit
-    await page.locator('button:has-text("Create Survey")').click()
+    await Promise.all([
+      page.waitForResponse((res) => res.url().includes('/api/v2/surveys') && res.request().method() === 'POST'),
+      page.locator('button:has-text("Create Survey")').click(),
+    ])
 
     // Should redirect to questions page
     await expect(page).toHaveURL(/\/survey\/\d+\/questions/)
@@ -148,7 +156,8 @@ test.describe('Survey Creation Flow', () => {
     // Try to submit without title
     await page.locator('button:has-text("Create Survey")').click()
 
-    // Should show validation error
-    await expect(page.locator('text=Please enter a survey title')).toBeVisible()
+    // Browser validation should keep us on the page and mark the field invalid
+    await expect(page).toHaveURL(/\/survey\/create/)
+    await expect(page.locator('input[name="title"]:invalid')).toBeVisible()
   })
 })

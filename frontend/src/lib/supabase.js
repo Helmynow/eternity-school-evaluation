@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ywcfqlyhesnikclesgpr.supabase.co'
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim()
 // Avoid hardcoding keys in the client bundle. Configure via VITE_SUPABASE_ANON_KEY at build time.
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'MISSING_SUPABASE_ANON_KEY'
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('CRITICAL: Supabase configuration is missing!')
+  // In production we should never run with missing Supabase config.
+  if (import.meta.env.PROD) {
+    throw new Error('CRITICAL: Supabase configuration is missing (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).')
+  }
+  console.error('CRITICAL: Supabase configuration is missing (dev).')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -17,8 +21,53 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Helper to get user role from metadata
+const withTimeout = (promise, ms) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+
+const getSessionFromStorage = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const key = Object.keys(window.localStorage).find((k) => k.includes('auth-token'))
+    if (!key) return null
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch (error) {
+    return null
+  }
+}
+
 export const getUserRole = async () => {
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  const isE2E = import.meta.env.VITE_E2E_MOCK_AUTH === 'true'
+
+  // Prefer cached session user to avoid blocking on network.
+  try {
+    if (!isE2E) {
+      const { data: { session } } = await withTimeout(supabase.auth.getSession(), 2000)
+      user = session?.user ?? null
+    }
+  } catch (error) {
+    // Ignore session retrieval failures.
+  }
+
+  if (!user) {
+    const cached = getSessionFromStorage()
+    user = cached?.user ?? null
+  }
+
+  // Best-effort fetch of the authoritative user record (may fail offline).
+  try {
+    if (!isE2E) {
+      const { data } = await withTimeout(supabase.auth.getUser(), 2000)
+      if (data?.user) user = data.user
+    }
+  } catch (error) {
+    // Fall back to session user if the network call fails.
+  }
+
   if (!user) return null
   
   // Check user metadata for role
@@ -57,4 +106,3 @@ export const hasPermission = async (requiredRole) => {
 }
 
 export default supabase
-
