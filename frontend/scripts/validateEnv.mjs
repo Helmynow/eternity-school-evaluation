@@ -52,10 +52,12 @@ for (const { key, hint } of required) {
   }
 }
 
+// API base URL
+// - If VITE_API_URL is unset, the frontend defaults to same-origin relative paths (see `frontend/src/lib/api.js`).
+// - This works well when deploying the FastAPI backend in the same Vercel project under `/api/*`.
+// - If you're hosting the backend elsewhere, set VITE_API_URL to that origin (e.g. https://api.example.com).
 const apiUrl = (process.env.VITE_API_URL || '').trim()
-if (!apiUrl) {
-  errors.push('VITE_API_URL is required for production builds (set to your deployed backend base URL).')
-} else if (/(?:^|\/\/)(?:localhost|127\.0\.0\.1)(?::\d+)?/.test(apiUrl)) {
+if (apiUrl && /(?:^|\/\/)(?:localhost|127\.0\.0\.1)(?::\d+)?/.test(apiUrl)) {
   errors.push('VITE_API_URL must not point to localhost/127.0.0.1 for production builds.')
 }
 

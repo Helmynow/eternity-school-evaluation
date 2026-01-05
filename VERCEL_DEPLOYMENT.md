@@ -2,14 +2,14 @@
 
 ## Prerequisites
 
-1. **Vercel Account**: Sign up at https://vercel.com
+1. **Vercel Account**: Sign up at <https://vercel.com>
 2. **Supabase Project**: Already configured (Project ID: `ywcfqlyhesnikclesgpr`)
 3. **Git Repository**: Your code should be in a Git repository (GitHub, GitLab, or Bitbucket)
 
 ## Step 1: Connect to Git
 
 1. Push your code to GitHub/GitLab/Bitbucket
-2. Go to https://vercel.com/new
+2. Go to <https://vercel.com/new>
 3. Import your Git repository
 4. Vercel will auto-detect the project
 
@@ -58,7 +58,9 @@ ALLOWED_ORIGINS=https://your-domain.vercel.app
 
 ### Backend (API)
 
-- The FastAPI backend is deployed as a Vercel Python Serverless Function from `api/index.py`
+- The FastAPI backend is deployed as a Vercel Python Serverless Function from `api/[...path].py`
+- The frontend calls the API using same-origin requests by default (so `VITE_API_URL` is optional).
+- If you host the backend on a different domain, set `VITE_API_URL` to that backend base URL.
 - Ensure Python dependencies are available via `requirements.txt`
 
 ## Step 3: Run Database Migrations
@@ -82,7 +84,7 @@ supabase db push
 
 ### Option B: Using Supabase Dashboard
 
-1. Go to https://supabase.com/dashboard/project/ywcfqlyhesnikclesgpr
+1. Go to <https://supabase.com/dashboard/project/ywcfqlyhesnikclesgpr>
 2. Navigate to SQL Editor
 3. Run each migration file from `supabase/migrations/` in order
 
@@ -101,16 +103,19 @@ supabase db push
 ## Troubleshooting
 
 ### Database Connection Issues
+
 - Verify DATABASE_URL is correct
 - Check Supabase connection pooling settings
 - Ensure IP is whitelisted in Supabase
 
 ### Build Failures
+
 - Check Python version (should be 3.11+)
 - Verify all dependencies in requirements.txt
 - Check build logs in Vercel Dashboard
 
 ### Runtime Errors
+
 - Check function logs in Vercel Dashboard
 - Verify environment variables are set
 - Check Supabase connection

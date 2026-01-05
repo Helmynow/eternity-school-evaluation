@@ -25,6 +25,12 @@ SUPABASE_SERVICE_ROLE_KEY=[GET-FROM-SUPABASE-DASHBOARD]
 VITE_SUPABASE_URL=https://ywcfqlyhesnikclesgpr.supabase.co
 VITE_SUPABASE_ANON_KEY=[GET-FROM-SUPABASE-DASHBOARD]
 
+# Optional: If your API is hosted on a different domain than your Vercel app,
+# set this to that backend base URL (e.g. https://api.example.com).
+# If you deploy the FastAPI backend in the same Vercel project under `/api/*`,
+# you can omit this and the frontend will use same-origin requests.
+VITE_API_URL=
+
 # Sentry
 SENTRY_DSN=[YOUR-SENTRY_DSN]
 
@@ -36,7 +42,7 @@ ALLOWED_ORIGINS=https://your-project.vercel.app
 
 ## How to Get Supabase Keys
 
-1. Go to https://supabase.com/dashboard/project/ywcfqlyhesnikclesgpr
+1. Go to <https://supabase.com/dashboard/project/ywcfqlyhesnikclesgpr>
 2. Navigate to **Settings → API**
 3. Copy:
    - **anon** key → `SUPABASE_ANON_KEY`

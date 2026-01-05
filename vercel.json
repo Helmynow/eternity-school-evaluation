@@ -2,10 +2,8 @@
   "buildCommand": "cd frontend && npm ci && npm run build && rm -rf node_modules",
   "outputDirectory": "frontend/dist",
   "framework": null,
-  "rewrites": [
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
