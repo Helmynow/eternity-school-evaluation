@@ -16,7 +16,7 @@ code supabase/migrations/20240101000000_initial_schema.sql
 
 ---
 
-## All 19 Migration Files
+## All 42 Migration Files
 
 ### 1. `20240101000000_initial_schema.sql` (285 lines)
 **Purpose:** Base schema - Creates all tables, enums, indexes, and constraints
@@ -274,6 +274,173 @@ code supabase/migrations/20240101000000_initial_schema.sql
 
 ---
 
+### 20. `20240101000019_normalize_objections_submitted_by.sql` (77 lines)
+**Purpose:** Normalize objections submitter data
+
+**Updates:**
+- Renames/backfills legacy objection submitter fields safely
+- Adds/repairs related indexes
+
+**Full path:** `supabase/migrations/20240101000019_normalize_objections_submitted_by.sql`
+
+---
+
+### 21. `20240101000020_super_admin_bootstrap_and_settings.sql` (147 lines)
+**Purpose:** CEO bootstrap super admin + system settings
+
+**Updates:**
+- Removes hardcoded super admin email from policies
+- Adds `system_settings` singleton table for Settings UI
+- Adds bootstrap helpers used by CEO/Super Admin logic
+
+**Full path:** `supabase/migrations/20240101000020_super_admin_bootstrap_and_settings.sql`
+
+---
+
+### 22. `20240101000021_hybrid_identity_sessions.sql` (66 lines)
+**Purpose:** Hybrid identity session persistence
+
+**Creates:**
+- `hybrid_identity_sessions` for cross-request survey flows
+
+**Full path:** `supabase/migrations/20240101000021_hybrid_identity_sessions.sql`
+
+---
+
+### 23. `20240101000022_security_lint_fixes.sql` (134 lines)
+**Purpose:** Security lint fixes (RLS + SECURITY INVOKER)
+
+**Updates:**
+- Ensures views use SECURITY INVOKER
+- Enables RLS on missing tables
+- Adds missing policies where needed
+
+**Full path:** `supabase/migrations/20240101000022_security_lint_fixes.sql`
+
+---
+
+### 24. `20240101000023_fix_function_search_path_mutable.sql` (101 lines)
+**Purpose:** Fix function search_path warnings (survey/identity/admin)
+
+**Updates:**
+- Sets `search_path` for survey/identity/admin functions
+
+**Full path:** `supabase/migrations/20240101000023_fix_function_search_path_mutable.sql`
+
+---
+
+### 25. `20240101000024_rls_policy_consolidation.sql` (100 lines)
+**Purpose:** RLS policy consolidation + auth initplan improvements
+
+**Updates:**
+- Merges duplicate permissive policies
+- Wraps `auth.*` calls for initplan caching
+
+**Full path:** `supabase/migrations/20240101000024_rls_policy_consolidation.sql`
+
+---
+
+### 26. `20240101000025_drop_duplicate_indexes.sql` (9 lines)
+**Purpose:** Drop duplicate indexes (safe)
+
+**Updates:**
+- Removes redundant indexes on survey and notification tables
+
+**Full path:** `supabase/migrations/20240101000025_drop_duplicate_indexes.sql`
+
+---
+
+### 27. `20240101000026_rls_announcements_email_settings.sql` (14 lines)
+**Purpose:** Fix auth initplan warnings + consolidate SELECT policies
+
+**Updates:**
+- Improves announcements policy
+- Consolidates `email_notifications` and `system_settings` policies
+
+**Full path:** `supabase/migrations/20240101000026_rls_announcements_email_settings.sql`
+
+---
+
+### 28. `20240101000027_fix_sla_function_search_path.sql` (19 lines)
+**Purpose:** Fix function search_path warnings for SLA/decision helpers
+
+**Updates:**
+- Sets `search_path` for SLA/decision helper functions (guarded)
+
+**Full path:** `supabase/migrations/20240101000027_fix_sla_function_search_path.sql`
+
+---
+
+### 29. `20260103233511_dashboard_consolidation.sql` (129 lines)
+**Purpose:** Dashboard data consolidation + realtime support
+
+**Updates:**
+- Adds consolidated RPCs for dashboard stats/nav badges
+
+**Full path:** `supabase/migrations/20260103233511_dashboard_consolidation.sql`
+
+---
+
+### 30. `20260103233630_fix_notification_outbox.sql` (70 lines)
+**Purpose:** Fix notification outbox + nav badge RPC
+
+**Updates:**
+- Adds `read_at` to notification outbox
+- Updates nav badge counts
+
+**Full path:** `supabase/migrations/20260103233630_fix_notification_outbox.sql`
+
+---
+
+### 31. `20260103235729_create_kv_table_70ac3e4c.sql` (1 line)
+**Purpose:** Create KV store table with RLS
+
+**Creates:**
+- `kv_store_70ac3e4c` with JSONB value and RLS enabled
+
+**Full path:** `supabase/migrations/20260103235729_create_kv_table_70ac3e4c.sql`
+
+---
+
+### 32. `20260104000028_critical_audit_fixes.sql` (93 lines)
+**Purpose:** Critical audit fixes
+
+**Updates:**
+- Soft delete support
+- Cascade protections
+- Vote tracking + status constraints
+
+**Full path:** `supabase/migrations/20260104000028_critical_audit_fixes.sql`
+
+---
+
+### 33. `20260105000010_survey_abandonment_tracking.sql` (138 lines)
+**Purpose:** Survey abandonment tracking + session timeout support
+
+**Updates:**
+- Adds lifecycle fields to `survey_responses`
+- Adds optional session fields to `hybrid_identity_sessions`
+- Backfills/indices with safety guards
+
+**Full path:** `supabase/migrations/20260105000010_survey_abandonment_tracking.sql`
+
+---
+
+### 34–42. Remote-applied placeholder migrations (no local SQL)
+These are placeholder files added to align local history with remote migration versions. The original SQL was applied directly on the remote database.
+
+- `20260105030420_remote_applied_placeholder.sql`
+- `20260105030438_remote_applied_placeholder.sql`
+- `20260105030451_remote_applied_placeholder.sql`
+- `20260105030457_remote_applied_placeholder.sql`
+- `20260105030524_remote_applied_placeholder.sql`
+- `20260105030538_remote_applied_placeholder.sql`
+- `20260105030629_remote_applied_placeholder.sql`
+- `20260105030709_remote_applied_placeholder.sql`
+- `20260105030814_remote_applied_placeholder.sql`
+
+---
+
 ## View All Files at Once
 
 ```bash
@@ -298,7 +465,7 @@ cat supabase/migrations/20240101000000_initial_schema.sql
 **Via Supabase Dashboard:**
 1. Go to https://supabase.com/dashboard/project/ywcfqlyhesnikclesgpr
 2. SQL Editor → New Query
-3. Copy and paste each migration file in order (00000 → 00018)
+3. Copy and paste each migration file in order (00000 → latest)
 4. Run each one
 
 **Via CLI:**

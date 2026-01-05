@@ -1,0 +1,3 @@
+-- Placeholder migration to reconcile remote migration history.
+-- Original SQL applied in remote, but not present locally.
+-- Keep this file to align versions; do not edit or apply manually.
